@@ -51,7 +51,7 @@ func (u *Uploader) SaveMultipartImage(fileHeader *multipart.FileHeader, maxBytes
 	if err != nil {
 		return "", nil, "", fmt.Errorf("open uploaded file: %w", err)
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }()
 
 	ext := pickExtension(mimeType, fileHeader.Filename)
 	filename := fmt.Sprintf("%s%s", randomHex(16), ext)

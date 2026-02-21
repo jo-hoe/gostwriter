@@ -211,7 +211,9 @@ func TestCreateTranscription_Asynchronous202(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// Processor for queue won't be used by handler, but worker needs something
-	queue.Start(ctx, &fakeProcessor{store: store})
+	if err := queue.Start(ctx, &fakeProcessor{store: store}); err != nil {
+		t.Fatalf("queue start: %v", err)
+	}
 	defer queue.Shutdown(1 * time.Second)
 
 	svc := &Service{

@@ -14,7 +14,7 @@ func TestSQLiteStore_JobLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteStore: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	now := time.Now().UTC().Truncate(time.Second)
 

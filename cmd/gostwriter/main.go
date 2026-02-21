@@ -1,4 +1,4 @@
-package main
+ package main
 
 import (
 	"context"
@@ -38,7 +38,7 @@ func main() {
 		logger.Error("sqlite open", "err", err)
 		os.Exit(1)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Uploader
 	uploader := storage.NewUploader(cfg.Server.StorageDir)

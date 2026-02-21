@@ -2,7 +2,6 @@ package storage
 
 import (
 	"bytes"
-	"io"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -157,5 +156,3 @@ func TestUploader_CleanupRemovesFile(t *testing.T) {
 	}
 }
 
-// ensure helper not optimized away
-func sink(w io.Writer, b []byte) { _, _ = w.Write(b) }

@@ -124,8 +124,8 @@ func TestWorker_Process_SuccessWithCallback(t *testing.T) {
 	// Callback collector
 	var cbMu sync.Mutex
 	var cbBodies []map[string]any
-	cbSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
+		cbSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() { _ = r.Body.Close() }()
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		cbMu.Lock()

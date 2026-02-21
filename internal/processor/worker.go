@@ -52,7 +52,7 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 		w.finishWithError(job.ID, fmt.Errorf("open image: %w", err))
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	md, err := w.LLM.TranscribeImage(ctx, f, job.MimeType)
 	if err != nil {
@@ -181,7 +181,9 @@ func (w *Worker) postJSON(ctx context.Context, url string, payload any) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	if resp.Body != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("callback status %d", resp.StatusCode)
 	}
