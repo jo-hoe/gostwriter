@@ -1,0 +1,266 @@
+package server
+
+import (
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"path"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/jo-hoe/gostwriter/internal/config"
+	"github.com/jo-hoe/gostwriter/internal/jobs"
+	"github.com/jo-hoe/gostwriter/internal/storage"
+	"github.com/jo-hoe/gostwriter/internal/targets"
+	"github.com/jo-hoe/gostwriter/internal/util"
+)
+
+type Service struct {
+	Log       *slog.Logger
+	Cfg       *config.Config
+	Store     jobs.Store
+	Queue     *jobs.Queue
+	Uploader  *storage.Uploader
+	Targets   *targets.Registry
+	Processor jobs.Processor
+}
+
+// NewHTTPServer builds the http.Server with routes and middleware.
+func NewHTTPServer(svc *Service) *http.Server {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+
+	mux.HandleFunc("POST /v1/transcriptions", svc.withCommon(svc.handleCreateTranscription))
+	// Pattern match /v1/transcriptions/{id}
+	mux.HandleFunc("GET /v1/transcriptions/", svc.withCommon(svc.handleGetTranscriptionByPrefix))
+
+	s := &http.Server{
+		Addr:         svc.Cfg.Server.Addr,
+		Handler:      loggingMiddleware(recoveryMiddleware(mux), svc.Log),
+		ReadTimeout:  svc.Cfg.Server.ReadTimeout,
+		WriteTimeout: svc.Cfg.Server.WriteTimeout,
+		IdleTimeout:  svc.Cfg.Server.IdleTimeout,
+	}
+	return s
+}
+
+func (svc *Service) withCommon(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Enforce API key if configured
+		if key := strings.TrimSpace(svc.Cfg.Server.APIKey); key != "" {
+			if r.Header.Get("X-API-Key") != key {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+		}
+		// Enforce max body size
+		max := int64(svc.Cfg.Server.MaxUploadSize)
+		if max > 0 {
+			r.Body = http.MaxBytesReader(w, r.Body, max)
+		}
+		next.ServeHTTP(w, r)
+	}
+}
+
+type createResponse struct {
+	JobID     string `json:"job_id"`
+	StatusURL string `json:"status_url"`
+}
+
+func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+	// Parse multipart
+	if err := r.ParseMultipartForm(int64(svc.Cfg.Server.MaxUploadSize)); err != nil {
+		http.Error(w, "invalid form: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// File
+	fileHeader := r.MultipartForm.File["file"]
+	if len(fileHeader) == 0 {
+		http.Error(w, "file is required", http.StatusBadRequest)
+		return
+	}
+	uploaded := fileHeader[0]
+
+	// Target is fixed by configuration; request cannot override
+	targetName := svc.Cfg.Target.Name
+
+	var callbackURLPtr *string
+	if v := strings.TrimSpace(r.FormValue("callback_url")); v != "" {
+		if _, err := url.ParseRequestURI(v); err != nil {
+			http.Error(w, "invalid callback_url", http.StatusBadRequest)
+			return
+		}
+		callbackURLPtr = &v
+	}
+
+	var titlePtr *string
+	if v := strings.TrimSpace(r.FormValue("title")); v != "" {
+		titlePtr = &v
+	}
+
+	metadata := map[string]any(nil)
+	if v := strings.TrimSpace(r.FormValue("metadata")); v != "" {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(v), &m); err != nil {
+			http.Error(w, "invalid metadata json", http.StatusBadRequest)
+			return
+		}
+		metadata = m
+	}
+
+	// Store upload
+	imgPath, cleanup, mimeType, err := svc.Uploader.SaveMultipartImage(uploaded, int64(svc.Cfg.Server.MaxUploadSize))
+	if err != nil {
+		http.Error(w, "upload failed: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	// Ensure we cleanup temp file if we fail later in this handler
+	defer func() {
+		// The worker will also call cleanup after processing, but if we failed before enqueue, cleanup here
+		if cleanup != nil {
+			_ = cleanup()
+		}
+	}()
+
+	// Build job
+	jobID := util.NewID()
+	job := jobs.Job{
+		ID:         jobID,
+		ImagePath:  imgPath,
+		MimeType:   mimeType,
+		TargetName: targetName,
+		CallbackURL: func() *string {
+			if callbackURLPtr == nil {
+				return nil
+			}
+			return callbackURLPtr
+		}(),
+		Title:    titlePtr,
+		Metadata: metadata,
+		Stage:     jobs.StageQueued,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	if err := svc.Store.CreateJob(&job); err != nil {
+		http.Error(w, "persist job: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Enqueue for async processing; transfer cleanup responsibility to worker on success
+	err = svc.Queue.Enqueue(jobs.WorkItem{
+		Job:     job,
+		Cleanup: cleanup,
+	})
+	if err != nil {
+		// Failed to enqueue; cleanup will run due to defer
+		http.Error(w, "queue full, try later", http.StatusServiceUnavailable)
+		return
+	}
+	// We handed cleanup to the worker. Prevent double-delete here.
+	cleanup = nil
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	resp := createResponse{
+		JobID:     jobID,
+		StatusURL: path.Join("/v1/transcriptions", jobID),
+	}
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+var idPattern = regexp.MustCompile(`^/v1/transcriptions/([a-f0-9-]+)$`)
+
+func (svc *Service) handleGetTranscriptionByPrefix(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+	m := idPattern.FindStringSubmatch(r.URL.Path)
+	if len(m) != 2 {
+		http.NotFound(w, r)
+		return
+	}
+	id := m[1]
+	job, err := svc.Store.GetJob(id)
+	if err != nil || job == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	type result struct {
+		Target   string `json:"target"`
+		Location string `json:"location"`
+		Commit   string `json:"commit"`
+	}
+	out := map[string]any{
+		"job_id":       job.ID,
+		"stage":        string(job.Stage),
+		"created_at":   job.CreatedAt,
+		"started_at":   job.StartedAt,
+		"completed_at": job.CompletedAt,
+		"error":        job.ErrorMessage,
+	}
+	if job.TargetLocation != nil || job.TargetCommit != nil {
+		out["target_result"] = result{
+			Target:   job.TargetName,
+			Location: deref(job.TargetLocation),
+			Commit:   deref(job.TargetCommit),
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+func deref(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+func loggingMiddleware(next http.Handler, log *slog.Logger) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		ww := &writeWrap{ResponseWriter: w, code: 200}
+		next.ServeHTTP(ww, r)
+		log.Info("http",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", ww.code,
+			"duration", time.Since(start).String(),
+			"remote", r.RemoteAddr)
+	})
+}
+
+type writeWrap struct {
+	http.ResponseWriter
+	code int
+}
+
+func (w *writeWrap) WriteHeader(statusCode int) {
+	w.code = statusCode
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func recoveryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				http.Error(w, "internal error", http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
