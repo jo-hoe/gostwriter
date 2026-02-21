@@ -1,0 +1,14 @@
+apiVersion: v2
+name: gostwriter
+description: Helm chart for deploying Gostwriter
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords:
+  - gostwriter
+  - transcription
+  - git
+maintainers:
+  - name: jo-hoe
+sources:
+  - https://github.com/jo-hoe/gostwriter

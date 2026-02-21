@@ -1,0 +1,40 @@
+# Local docker-compose config for Gostwriter
+# Copy/modify as needed. Secrets like GIT_TOKEN are provided via environment (.env) or compose env.
+server:
+  addr: ":8080"
+  readTimeout: 15s
+  writeTimeout: 30s
+  idleTimeout: 60s
+  maxUploadSize: 10Mi
+  workerCount: 4
+  # Use the container path that matches the Dockerfile and Helm chart
+  storageDir: "/app/data"
+  apiKey: ""
+  databasePath: ""
+  shutdownGrace: 15s
+  callbackRetries: 3
+  callbackBackoff: 2s
+
+llm:
+  provider: "mock"
+  mock:
+    delay: 2s
+    prefix: "Transcribed by Mock"
+
+# Single target configuration (git)
+target:
+  type: "git"
+  name: "docs-main"
+  repoUrl: "https://github.com/yourorg/yourrepo.git"
+  branch: "main"
+  basePath: "inbox/"
+  filenameTemplate: '{{ .Timestamp.Format "20060102-150405" }}-{{ .JobID }}.md'
+  commitMessageTemplate: "Add transcription {{ .JobID }}"
+  authorName: "Gostwriter Bot"
+  authorEmail: "bot@example.com"
+  cloneCacheDir: ""
+  auth:
+    type: "basic"
+    username: "git"
+    # This will be expanded from the container env var GIT_TOKEN provided by docker-compose
+    token: "${GIT_TOKEN}"

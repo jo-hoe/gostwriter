@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  gostwriter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gostwriter:latest
+    container_name: gostwriter
+    ports:
+      - "8080:8080"
+    environment:
+      # App reads this by default from Dockerfile, but we set explicitly for clarity
+      - GOSTWRITER_CONFIG=/app/config/config.yaml
+      # Provide your Git token via .env or environment; used inside config via ${GIT_TOKEN}
+      - GIT_TOKEN=${GIT_TOKEN:-}
+    volumes:
+      # Local app config for compose runs (create dev/app-config.yaml)
+      - ./dev/app-config.yaml:/app/config/config.yaml:ro
+      # Local data dir for SQLite DB and git clone cache
+      - ./dev/data:/app/data
+    restart: unless-stopped

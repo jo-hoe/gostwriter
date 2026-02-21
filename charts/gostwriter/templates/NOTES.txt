@@ -1,0 +1,56 @@
+{{- if .Values.ingress.enabled }}
+1. Ingress has been enabled.
+   Access:
+   {{- range .Values.ingress.hosts }}
+   - http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}{{ (index .paths 0).path | default "/" }}
+   {{- end }}
+   In k3d (with Traefik), this typically maps to http://localhost:8080/
+{{- else }}
+{{- if eq .Values.service.type "LoadBalancer" }}
+1. Service Type: LoadBalancer
+   In k3d, the loadbalancer is mapped in dev/clusterconfig.yaml to:
+   - URL: http://localhost:8080/
+{{- else if eq .Values.service.type "NodePort" }}
+1. Service Type: NodePort
+   Find the NodePort:
+     kubectl get svc {{ include "gostwriter.fullname" . }} -o jsonpath='{.spec.ports[0].nodePort}'
+   Then access via any node IP with that port.
+{{- else }}
+1. Service Type: ClusterIP
+   Port-forward to access locally:
+     kubectl port-forward svc/{{ include "gostwriter.fullname" . }} 8080:{{ .Values.service.port }}
+   Open:
+     http://localhost:8080{{ "/" }}
+{{- end }}
+{{- end }}
+
+2. API Endpoints:
+   - Health: GET /healthz
+   - Create transcription (multipart): POST /v1/transcriptions
+     form fields:
+       - file: image/png or image/jpeg
+       - callback_url (optional)
+       - title (optional)
+       - metadata (optional JSON)
+     headers:
+       - Prefer: respond-async (for async processing)
+       - X-API-Key: <key> (if configured)
+
+3. Configuration:
+   - Config is mounted from ConfigMap: {{ include "gostwriter.fullname" . }}-config at /app/config/config.yaml
+   - Data (SQLite DB, uploads, git clones) is mounted at /app/data
+   - Sensitive values (e.g., GIT_TOKEN) are provided via:
+     {{- if .Values.existingSecret }}
+       existing Secret: {{ .Values.existingSecret }}
+     {{- else if .Values.secretEnv.create }}
+       Secret: {{ include "gostwriter.secretEnvName" . }}
+     {{- else }}
+       no Secret configured (configure .Values.existingSecret or .Values.secretEnv.create)
+     {{- end }}
+
+4. Git target token:
+   - The rendered config expects token via env var name: {{ .Values.target.auth.tokenVarName | quote }}
+   - Ensure the Secret contains a key with that name.
+
+5. Uninstall:
+   helm uninstall {{ .Release.Name }}
