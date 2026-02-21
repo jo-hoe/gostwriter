@@ -20,6 +20,12 @@ type Uploader struct {
 	baseDir string
 }
 
+var allowedImageMimes = map[string]string{
+	common.MimeImagePNG:  ".png",
+	common.MimeImageJPEG: ".jpg",
+	common.MimeImageJPG:  ".jpg",
+}
+
 // NewUploader creates an uploader that stores to baseDir/uploads.
 func NewUploader(baseDir string) *Uploader {
 	return &Uploader{baseDir: filepath.Join(baseDir, common.UploadsDirName)}
@@ -79,28 +85,20 @@ func (u *Uploader) SaveMultipartImage(fileHeader *multipart.FileHeader, maxBytes
 
 func isAllowedImageMime(mimeType string) bool {
 	mt := strings.ToLower(strings.TrimSpace(mimeType))
-	switch mt {
-	case common.MimeImagePNG, common.MimeImageJPEG, common.MimeImageJPG:
-		return true
-	default:
-		return false
-	}
+	_, ok := allowedImageMimes[mt]
+	return ok
 }
 
 func pickExtension(mimeType, original string) string {
 	mt := strings.ToLower(strings.TrimSpace(mimeType))
-	switch mt {
-	case common.MimeImagePNG:
-		return ".png"
-	case common.MimeImageJPEG, common.MimeImageJPG:
-		return ".jpg"
-	default:
-		ext := strings.ToLower(filepath.Ext(original))
-		if ext == "" {
-			return ".bin"
-		}
+	if ext, ok := allowedImageMimes[mt]; ok {
 		return ext
 	}
+	ext := strings.ToLower(filepath.Ext(original))
+	if ext == "" {
+		return ".bin"
+	}
+	return ext
 }
 
 func randomHex(n int) string {

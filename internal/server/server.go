@@ -34,8 +34,7 @@ type Service struct {
 func NewHTTPServer(svc *Service) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc(http.MethodGet+" "+common.PathHealthz, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", common.ContentTypeJSON)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
 	mux.HandleFunc(http.MethodPost+" "+common.PathTranscriptions, svc.withCommon(svc.handleCreateTranscription))
@@ -97,28 +96,17 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 	// Target is fixed by configuration; request cannot override
 	targetName := svc.Cfg.Target.Name
 
-	var callbackURLPtr *string
-	if v := strings.TrimSpace(r.FormValue("callback_url")); v != "" {
-		if _, err := url.ParseRequestURI(v); err != nil {
-			http.Error(w, "invalid callback_url", http.StatusBadRequest)
-			return
-		}
-		callbackURLPtr = &v
+	// Optional fields
+	callbackURLPtr, err := parseOptionalURL(r.FormValue("callback_url"))
+	if err != nil {
+		http.Error(w, "invalid callback_url", http.StatusBadRequest)
+		return
 	}
-
-	var titlePtr *string
-	if v := strings.TrimSpace(r.FormValue("title")); v != "" {
-		titlePtr = &v
-	}
-
-	metadata := map[string]any(nil)
-	if v := strings.TrimSpace(r.FormValue("metadata")); v != "" {
-		var m map[string]any
-		if err := json.Unmarshal([]byte(v), &m); err != nil {
-			http.Error(w, "invalid metadata json", http.StatusBadRequest)
-			return
-		}
-		metadata = m
+	titlePtr := parseOptionalString(r.FormValue("title"))
+	metadata, err := parseOptionalJSONMap(r.FormValue("metadata"))
+	if err != nil {
+		http.Error(w, "invalid metadata json", http.StatusBadRequest)
+		return
 	}
 
 	// Store upload
@@ -138,20 +126,15 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 	// Build job
 	jobID := util.NewID()
 	job := jobs.Job{
-		ID:         jobID,
-		ImagePath:  imgPath,
-		MimeType:   mimeType,
-		TargetName: targetName,
-		CallbackURL: func() *string {
-			if callbackURLPtr == nil {
-				return nil
-			}
-			return callbackURLPtr
-		}(),
-		Title:     titlePtr,
-		Metadata:  metadata,
-		Stage:     jobs.StageQueued,
-		CreatedAt: time.Now().UTC(),
+		ID:          jobID,
+		ImagePath:   imgPath,
+		MimeType:    mimeType,
+		TargetName:  targetName,
+		CallbackURL: callbackURLPtr,
+		Title:       titlePtr,
+		Metadata:    metadata,
+		Stage:       jobs.StageQueued,
+		CreatedAt:   time.Now().UTC(),
 	}
 
 	if err := svc.Store.CreateJob(&job); err != nil {
@@ -177,13 +160,10 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 		// We handed cleanup to the worker. Prevent double-delete here.
 		cleanup = nil
 
-		w.Header().Set("Content-Type", common.ContentTypeJSON)
-		w.WriteHeader(http.StatusAccepted)
-		resp := createResponse{
+		writeJSON(w, http.StatusAccepted, createResponse{
 			JobID:     jobID,
 			StatusURL: path.Join(common.PathTranscriptions, jobID),
-		}
-		_ = json.NewEncoder(w).Encode(resp)
+		})
 		return
 	}
 
@@ -200,29 +180,7 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	type result struct {
-		Target   string `json:"target"`
-		Location string `json:"location"`
-		Commit   string `json:"commit"`
-	}
-	out := map[string]any{
-		"job_id":       finalJob.ID,
-		"stage":        string(finalJob.Stage),
-		"created_at":   finalJob.CreatedAt,
-		"started_at":   finalJob.StartedAt,
-		"completed_at": finalJob.CompletedAt,
-		"error":        finalJob.ErrorMessage,
-	}
-	if finalJob.TargetLocation != nil || finalJob.TargetCommit != nil {
-		out["target_result"] = result{
-			Target:   finalJob.TargetName,
-			Location: deref(finalJob.TargetLocation),
-			Commit:   deref(finalJob.TargetCommit),
-		}
-	}
-	w.Header().Set("Content-Type", common.ContentTypeJSON)
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(out)
+	writeJSON(w, http.StatusOK, jobToOut(finalJob))
 }
 
 var idPattern = regexp.MustCompile(fmt.Sprintf("^%s/([a-f0-9-]+)$", common.PathTranscriptions))
@@ -244,6 +202,17 @@ func (svc *Service) handleGetTranscriptionByPrefix(w http.ResponseWriter, r *htt
 		return
 	}
 
+	writeJSON(w, http.StatusOK, jobToOut(job))
+}
+
+func deref(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+func jobToOut(job *jobs.Job) map[string]any {
 	type result struct {
 		Target   string `json:"target"`
 		Location string `json:"location"`
@@ -264,16 +233,46 @@ func (svc *Service) handleGetTranscriptionByPrefix(w http.ResponseWriter, r *htt
 			Commit:   deref(job.TargetCommit),
 		}
 	}
-
-	w.Header().Set("Content-Type", common.ContentTypeJSON)
-	_ = json.NewEncoder(w).Encode(out)
+	return out
 }
 
-func deref(p *string) string {
-	if p == nil {
-		return ""
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", common.ContentTypeJSON)
+	if status != 0 {
+		w.WriteHeader(status)
 	}
-	return *p
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func parseOptionalURL(s string) (*string, error) {
+	v := strings.TrimSpace(s)
+	if v == "" {
+		return nil, nil
+	}
+	if _, err := url.ParseRequestURI(v); err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+func parseOptionalString(s string) *string {
+	v := strings.TrimSpace(s)
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+func parseOptionalJSONMap(s string) (map[string]any, error) {
+	v := strings.TrimSpace(s)
+	if v == "" {
+		return nil, nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(v), &m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func loggingMiddleware(next http.Handler, log *slog.Logger) http.Handler {

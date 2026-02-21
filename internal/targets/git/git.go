@@ -181,21 +181,11 @@ func (t *Target) pushRepo(ctx context.Context, repoDir string) error {
 }
 
 func (t *Target) renderFilename(req targets.TargetRequest) (string, error) {
-	tplStr := strings.TrimSpace(t.cfg.FilenameTemplate)
-	if tplStr == "" {
-		tplStr = "{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md"
+	data := t.templateData(req)
+	name, err := t.render(t.cfg.FilenameTemplate, "{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md", "filename", data)
+	if err != nil {
+		return "", err
 	}
-	var buf bytes.Buffer
-	data := map[string]any{
-		"JobID":          req.JobID,
-		"Timestamp":      req.Timestamp,
-		"SuggestedTitle": req.SuggestedTitle,
-		"Metadata":       req.Metadata,
-	}
-	if err := template.Must(template.New("filename").Parse(tplStr)).Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("render filename: %w", err)
-	}
-	name := strings.TrimSpace(buf.String())
 	if name == "" {
 		name = fmt.Sprintf("%s-%s.md", req.Timestamp.Format("20060102-150405"), req.JobID)
 	}
@@ -206,25 +196,40 @@ func (t *Target) renderFilename(req targets.TargetRequest) (string, error) {
 }
 
 func (t *Target) renderCommitMessage(req targets.TargetRequest) (string, error) {
-	tplStr := strings.TrimSpace(t.cfg.CommitMessageTemplate)
-	if tplStr == "" {
-		tplStr = "Add transcription {{ .JobID }}"
+	data := t.templateData(req)
+	msg, err := t.render(t.cfg.CommitMessageTemplate, "Add transcription {{ .JobID }}", "commit", data)
+	if err != nil {
+		return "", err
 	}
-	var buf bytes.Buffer
-	data := map[string]any{
+	if msg == "" {
+		msg = "Add transcription"
+	}
+	return msg, nil
+}
+
+func (t *Target) templateData(req targets.TargetRequest) map[string]any {
+	return map[string]any{
 		"JobID":          req.JobID,
 		"Timestamp":      req.Timestamp,
 		"SuggestedTitle": req.SuggestedTitle,
 		"Metadata":       req.Metadata,
 	}
-	if err := template.Must(template.New("commit").Parse(tplStr)).Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("render commit message: %w", err)
+}
+
+func (t *Target) render(tplStr, defaultTpl, name string, data map[string]any) (string, error) {
+	s := strings.TrimSpace(tplStr)
+	if s == "" {
+		s = defaultTpl
 	}
-	msg := strings.TrimSpace(buf.String())
-	if msg == "" {
-		msg = "Add transcription"
+	tpl, err := template.New(name).Parse(s)
+	if err != nil {
+		return "", fmt.Errorf("parse %s template: %w", name, err)
 	}
-	return msg, nil
+	var buf bytes.Buffer
+	if err := tpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("render %s: %w", name, err)
+	}
+	return strings.TrimSpace(buf.String()), nil
 }
 
 func (t *Target) repoCacheDir() string {
