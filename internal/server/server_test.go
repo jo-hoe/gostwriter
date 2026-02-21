@@ -5,10 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -158,9 +158,9 @@ func TestCreateTranscription_Synchronous200(t *testing.T) {
 		Log: nil,
 		Cfg: &config.Config{
 			Server: config.ServerConfig{
-				Addr:           ":0",
-				MaxUploadSize:  config.ByteSize(10 * 1024 * 1024),
-				StorageDir:     tmp,
+				Addr:            ":0",
+				MaxUploadSize:   config.ByteSize(10 * 1024 * 1024),
+				StorageDir:      tmp,
 				CallbackRetries: 1,
 				CallbackBackoff: 10 * time.Millisecond,
 			},
@@ -220,9 +220,9 @@ func TestCreateTranscription_Asynchronous202(t *testing.T) {
 		Log: nil,
 		Cfg: &config.Config{
 			Server: config.ServerConfig{
-				Addr:           ":0",
-				MaxUploadSize:  config.ByteSize(10 * 1024 * 1024),
-				StorageDir:     tmp,
+				Addr:            ":0",
+				MaxUploadSize:   config.ByteSize(10 * 1024 * 1024),
+				StorageDir:      tmp,
 				CallbackRetries: 1,
 				CallbackBackoff: 10 * time.Millisecond,
 			},

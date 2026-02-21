@@ -155,4 +155,3 @@ func TestUploader_CleanupRemovesFile(t *testing.T) {
 		t.Fatalf("file still exists after cleanup")
 	}
 }
-

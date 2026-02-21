@@ -20,8 +20,8 @@ import (
 )
 
 type memStore struct {
-	mu    sync.Mutex
-	jobs  map[string]*jobs.Job
+	mu   sync.Mutex
+	jobs map[string]*jobs.Job
 }
 
 func newMemStore() *memStore {
@@ -124,7 +124,7 @@ func TestWorker_Process_SuccessWithCallback(t *testing.T) {
 	// Callback collector
 	var cbMu sync.Mutex
 	var cbBodies []map[string]any
-		cbSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	cbSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() { _ = r.Body.Close() }()
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
@@ -153,10 +153,10 @@ func TestWorker_Process_SuccessWithCallback(t *testing.T) {
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			CallbackRetries:  2,
-			CallbackBackoff:  10 * time.Millisecond,
-			StorageDir:       t.TempDir(),
-			MaxUploadSize:    config.ByteSize(10 * 1024 * 1024),
+			CallbackRetries: 2,
+			CallbackBackoff: 10 * time.Millisecond,
+			StorageDir:      t.TempDir(),
+			MaxUploadSize:   config.ByteSize(10 * 1024 * 1024),
 		},
 		Target: config.TargetEntry{
 			Type: "git",
@@ -176,15 +176,15 @@ func TestWorker_Process_SuccessWithCallback(t *testing.T) {
 	title := "Title"
 	meta := map[string]any{"k": "v"}
 	job := jobs.Job{
-		ID:           "job-1",
-		ImagePath:    imgPath,
-		MimeType:     common.MimeImagePNG,
-		TargetName:   "docs",
-		CallbackURL:  &cbURL,
-		Title:        &title,
-		Metadata:     meta,
-		Stage:        jobs.StageQueued,
-		CreatedAt:    time.Now().UTC(),
+		ID:          "job-1",
+		ImagePath:   imgPath,
+		MimeType:    common.MimeImagePNG,
+		TargetName:  "docs",
+		CallbackURL: &cbURL,
+		Title:       &title,
+		Metadata:    meta,
+		Stage:       jobs.StageQueued,
+		CreatedAt:   time.Now().UTC(),
 	}
 	_ = store.CreateJob(&job)
 
@@ -221,10 +221,10 @@ func TestWorker_Process_LLMError_SetsFailed(t *testing.T) {
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			CallbackRetries:  1,
-			CallbackBackoff:  10 * time.Millisecond,
-			StorageDir:       t.TempDir(),
-			MaxUploadSize:    config.ByteSize(10 * 1024 * 1024),
+			CallbackRetries: 1,
+			CallbackBackoff: 10 * time.Millisecond,
+			StorageDir:      t.TempDir(),
+			MaxUploadSize:   config.ByteSize(10 * 1024 * 1024),
 		},
 		Target: config.TargetEntry{
 			Type: "git",
