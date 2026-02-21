@@ -1,10 +1,12 @@
 Gostwriter: async image-to-markdown transcription and posting service
 
 Overview
-Gostwriter provides an HTTP API to accept image uploads (PNG/JPEG), transcribe them to Markdown via a pluggable LLM client (mock included), and asynchronously post the resulting Markdown to a configured target. The current target is a single Git repository (via system git CLI). The service is designed to be extensible for future targets (e.g., OneDrive, email).
+Gostwriter provides an HTTP API to accept image uploads (PNG/JPEG), transcribe them to Markdown via a pluggable LLM client (mock included), and post the resulting Markdown to a configured target. By default, requests are processed synchronously and return 200 OK with the result. If the client sends Prefer: respond-async, the request is processed asynchronously and returns 202 with a job_id for status polling. The current target is a single Git repository (via system git CLI). The service is designed to be extensible for future targets (e.g., OneDrive, email).
 
 Key features
-- Async API: returns a job_id immediately, processes in background
+- Sync by default, async on request:
+  - Default: synchronous processing returns result with 200 OK
+  - Async when header Prefer: respond-async is present; returns 202 with job_id
 - Status endpoint to query current stage and result
 - Optional callback URL invoked on completion/failure
 - Config via YAML (lower camelCase keys)
@@ -75,20 +77,39 @@ HTTP API
 Health
 - GET /healthz -> {"status":"ok"}
 
-Create transcription (async)
+Create transcription
 - POST /v1/transcriptions (multipart/form-data)
+  Headers:
+  - Optional: Prefer: respond-async to request asynchronous handling
+  - Optional: X-API-Key when configured in server.apiKey
   Fields:
   - file: required; image/png or image/jpeg
   - callback_url: optional; URL to POST when completed or failed
   - title: optional; used as Markdown H1 header
   - metadata: optional; JSON object as string (e.g., {"category":"notes"})
-  Headers:
-  - X-API-Key: optional; required only if configured in server.apiKey
-  Response: 202 Accepted
-  {
-    "job_id": "uuid",
-    "status_url": "/v1/transcriptions/{uuid}"
-  }
+
+  Behavior:
+  - Default synchronous (no Prefer: respond-async header):
+    - Processes upload immediately (transcribe + post), returns 200 OK with result body:
+      {
+        "job_id": "uuid",
+        "stage": "completed",
+        "created_at": "...",
+        "started_at": "...",
+        "completed_at": "...",
+        "error": null,
+        "target_result": {
+          "target": "docs-main",
+          "location": "git:https://...@main:inbox/20260101-120000-<id>.md",
+          "commit": "abc123..."
+        }
+      }
+  - Asynchronous (Prefer: respond-async present):
+    - Enqueues background job and returns 202 Accepted:
+      {
+        "job_id": "uuid",
+        "status_url": "/v1/transcriptions/{uuid}"
+      }
 
 Status
 - GET /v1/transcriptions/{id}
@@ -130,20 +151,18 @@ Examples (PowerShell)
   $env:GIT_TOKEN="ghp_xxx"
   .\gostwriter.exe
 
-- Upload an image:
+- Synchronous upload (default):
   $form = @{
     file = Get-Item "C:\path\to\image.jpg"
     title = "Meeting Notes"
     metadata = '{"category":"meetings"}'
-    # callback_url = 'https://example.com/hook'
   }
   Invoke-RestMethod -Method Post -Uri http://localhost:8080/v1/transcriptions -Form $form
 
-  Response:
-  {
-    "job_id": "1e2d3c4b-.....",
-    "status_url": "/v1/transcriptions/1e2d3c4b-....."
-  }
+- Asynchronous upload:
+  Invoke-WebRequest -Method Post -Uri http://localhost:8080/v1/transcriptions `
+    -Headers @{ "Prefer" = "respond-async" } `
+    -Form $form
 
 - Check status:
   Invoke-RestMethod -Method Get -Uri http://localhost:8080/v1/transcriptions/1e2d3c4b-.....
@@ -152,7 +171,7 @@ Security and behavior notes
 - If server.apiKey is set, all API requests must include header X-API-Key.
 - Temporary image files are always deleted:
   - If enqueue fails: deleted by request handler.
-  - After processing: deleted by worker cleanup.
+  - After processing: deleted by worker cleanup (async) or by request handler (sync).
 - Job metadata persists in SQLite. It is easy to swap Store implementation (e.g., Redis) later.
 
 Extensibility

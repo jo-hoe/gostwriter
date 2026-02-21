@@ -156,26 +156,70 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Enqueue for async processing; transfer cleanup responsibility to worker on success
-	err = svc.Queue.Enqueue(jobs.WorkItem{
-		Job:     job,
-		Cleanup: cleanup,
-	})
-	if err != nil {
-		// Failed to enqueue; cleanup will run due to defer
-		http.Error(w, "queue full, try later", http.StatusServiceUnavailable)
+	// Determine sync vs async based on Prefer header
+	prefer := strings.ToLower(strings.TrimSpace(r.Header.Get("Prefer")))
+	async := strings.Contains(prefer, "respond-async")
+
+	if async {
+		// Enqueue for async processing; transfer cleanup responsibility to worker on success
+		err = svc.Queue.Enqueue(jobs.WorkItem{
+			Job:     job,
+			Cleanup: cleanup,
+		})
+		if err != nil {
+			// Failed to enqueue; cleanup will run due to defer
+			http.Error(w, "queue full, try later", http.StatusServiceUnavailable)
+			return
+		}
+		// We handed cleanup to the worker. Prevent double-delete here.
+		cleanup = nil
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		resp := createResponse{
+			JobID:     jobID,
+			StatusURL: path.Join("/v1/transcriptions", jobID),
+		}
+		_ = json.NewEncoder(w).Encode(resp)
 		return
 	}
-	// We handed cleanup to the worker. Prevent double-delete here.
-	cleanup = nil
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusAccepted)
-	resp := createResponse{
-		JobID:     jobID,
-		StatusURL: path.Join("/v1/transcriptions", jobID),
+	// Synchronous processing path: process the job inline and return result.
+	if err := svc.Processor.Process(r.Context(), jobs.WorkItem{Job: job}); err != nil {
+		http.Error(w, "processing failed: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
-	_ = json.NewEncoder(w).Encode(resp)
+
+	// Fetch final job state to include result
+	finalJob, err := svc.Store.GetJob(jobID)
+	if err != nil || finalJob == nil {
+		http.Error(w, "processed but status unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	type result struct {
+		Target   string `json:"target"`
+		Location string `json:"location"`
+		Commit   string `json:"commit"`
+	}
+	out := map[string]any{
+		"job_id":       finalJob.ID,
+		"stage":        string(finalJob.Stage),
+		"created_at":   finalJob.CreatedAt,
+		"started_at":   finalJob.StartedAt,
+		"completed_at": finalJob.CompletedAt,
+		"error":        finalJob.ErrorMessage,
+	}
+	if finalJob.TargetLocation != nil || finalJob.TargetCommit != nil {
+		out["target_result"] = result{
+			Target:   finalJob.TargetName,
+			Location: deref(finalJob.TargetLocation),
+			Commit:   deref(finalJob.TargetCommit),
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 var idPattern = regexp.MustCompile(`^/v1/transcriptions/([a-f0-9-]+)$`)
