@@ -8,29 +8,29 @@ import (
 type Stage string
 
 const (
-	StageQueued        Stage = "queued"
-	StageTranscribing  Stage = "transcribing"
-	StagePosting       Stage = "posting"
-	StageCompleted     Stage = "completed"
-	StageFailed        Stage = "failed"
+	StageQueued       Stage = "queued"
+	StageTranscribing Stage = "transcribing"
+	StagePosting      Stage = "posting"
+	StageCompleted    Stage = "completed"
+	StageFailed       Stage = "failed"
 )
 
 // Job describes a single transcription and posting request.
 type Job struct {
-	ID             string            // UUIDv4
-	ImagePath      string            // absolute or storage-relative path to the uploaded image (temporary)
-	MimeType       string            // image mime (image/png, image/jpeg)
-	TargetName     string            // configured target name to post to
-	CallbackURL    *string           // optional callback
-	Title          *string           // optional suggested title
-	Metadata       map[string]any    // optional arbitrary metadata
-	Stage          Stage             // current stage
-	ErrorMessage   *string           // last error, if any
-	TargetLocation *string           // result location string from target (e.g., path in repo)
-	TargetCommit   *string           // resulting commit hash if target supports it
-	CreatedAt      time.Time         // creation time
-	StartedAt      *time.Time        // when processing actually started
-	CompletedAt    *time.Time        // when finished (success or failure)
+	ID             string         // UUIDv4
+	ImagePath      string         // absolute or storage-relative path to the uploaded image (temporary)
+	MimeType       string         // image mime (image/png, image/jpeg)
+	TargetName     string         // configured target name to post to
+	CallbackURL    *string        // optional callback
+	Title          *string        // optional suggested title
+	Metadata       map[string]any // optional arbitrary metadata
+	Stage          Stage          // current stage
+	ErrorMessage   *string        // last error, if any
+	TargetLocation *string        // result location string from target (e.g., path in repo)
+	TargetCommit   *string        // resulting commit hash if target supports it
+	CreatedAt      time.Time      // creation time
+	StartedAt      *time.Time     // when processing actually started
+	CompletedAt    *time.Time     // when finished (success or failure)
 }
 
 // TargetResult represents the posting outcome returned by a target.

@@ -16,7 +16,7 @@ const (
 	PathTranscriptions = "/v1/transcriptions"
 )
 
-	// Defaults and limits
+// Defaults and limits
 const (
 	DefaultQueueCapacity = 128
 	DefaultWorkerCount   = 4
