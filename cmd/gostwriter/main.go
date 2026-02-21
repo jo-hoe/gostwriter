@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/jo-hoe/gostwriter/internal/common"
 	appcfg "github.com/jo-hoe/gostwriter/internal/config"
 	"github.com/jo-hoe/gostwriter/internal/jobs"
 	"github.com/jo-hoe/gostwriter/internal/llm"
@@ -44,7 +45,7 @@ func main() {
 
 	// Target (single)
 	reg := targets.NewRegistry()
-	reposRoot := filepath.Join(cfg.Server.StorageDir, "repos")
+	reposRoot := filepath.Join(cfg.Server.StorageDir, common.ReposDirName)
 	switch cfg.Target.Type {
 	case "git":
 		t, err := gitTarget.New(cfg.Target.Name, cfg.Target.Git, reposRoot)
@@ -70,7 +71,7 @@ func main() {
 
 	// Worker and queue
 	worker := processor.New(logger, cfg, store, llmClient, reg)
-	queue := jobs.NewQueue(logger, 128, cfg.Server.WorkerCount)
+	queue := jobs.NewQueue(logger, common.DefaultQueueCapacity, cfg.Server.WorkerCount)
 	rootCtx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	if err := queue.Start(rootCtx, worker); err != nil {

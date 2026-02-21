@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/jo-hoe/gostwriter/internal/common"
 )
 
 // WorkItem contains a copy of the job data needed for processing and a cleanup func for the temp image file.
@@ -34,10 +36,10 @@ type Queue struct {
 // NewQueue creates a new Queue with the given capacity and worker count.
 func NewQueue(logger *slog.Logger, capacity int, workers int) *Queue {
 	if capacity <= 0 {
-		capacity = 64
+		capacity = common.DefaultQueueCapacity
 	}
 	if workers <= 0 {
-		workers = 4
+		workers = common.DefaultWorkerCount
 	}
 	return &Queue{
 		log:     logger,

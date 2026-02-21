@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jo-hoe/gostwriter/internal/common"
 	_ "modernc.org/sqlite"
 )
 
@@ -16,7 +17,7 @@ type SQLiteStore struct {
 
 func NewSQLiteStore(path string) (*SQLiteStore, error) {
 	// Busy timeout to avoid SQLITE_BUSY in concurrent access.
-	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)", path)
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(%d)", path, common.SQLiteBusyTimeoutMS)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite db: %w", err)

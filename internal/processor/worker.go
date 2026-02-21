@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/jo-hoe/gostwriter/internal/common"
 	"github.com/jo-hoe/gostwriter/internal/config"
 	"github.com/jo-hoe/gostwriter/internal/jobs"
 	"github.com/jo-hoe/gostwriter/internal/llm"
@@ -101,7 +102,7 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 	if job.CallbackURL != nil && *job.CallbackURL != "" {
 		cbErr := w.sendCallbackWithRetry(ctx, *job.CallbackURL, callbackPayload{
 			JobID:  job.ID,
-			Status: "completed",
+			Status: common.StatusCompleted,
 			Stage:  string(jobs.StageCompleted),
 			Error:  nil,
 			Result: &callbackResult{
@@ -173,7 +174,7 @@ func (w *Worker) postJSON(ctx context.Context, url string, payload any) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", common.ContentTypeJSON)
 	// Optional: include a simple signature or key if required in future
 
 	resp, err := http.DefaultClient.Do(req)

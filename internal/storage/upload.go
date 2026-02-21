@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/jo-hoe/gostwriter/internal/common"
 )
 
 // Uploader handles storing temporary uploads on disk.
@@ -20,7 +22,7 @@ type Uploader struct {
 
 // NewUploader creates an uploader that stores to baseDir/uploads.
 func NewUploader(baseDir string) *Uploader {
-	return &Uploader{baseDir: filepath.Join(baseDir, "uploads")}
+	return &Uploader{baseDir: filepath.Join(baseDir, common.UploadsDirName)}
 }
 
 // SaveMultipartImage validates and stores an uploaded image (png/jpg) to disk.
@@ -77,7 +79,7 @@ func (u *Uploader) SaveMultipartImage(fileHeader *multipart.FileHeader, maxBytes
 func isAllowedImageMime(mimeType string) bool {
 	mt := strings.ToLower(strings.TrimSpace(mimeType))
 	switch mt {
-	case "image/png", "image/jpeg", "image/jpg":
+	case common.MimeImagePNG, common.MimeImageJPEG, common.MimeImageJPG:
 		return true
 	default:
 		return false
@@ -87,9 +89,9 @@ func isAllowedImageMime(mimeType string) bool {
 func pickExtension(mimeType, original string) string {
 	mt := strings.ToLower(strings.TrimSpace(mimeType))
 	switch mt {
-	case "image/png":
+	case common.MimeImagePNG:
 		return ".png"
-	case "image/jpeg", "image/jpg":
+	case common.MimeImageJPEG, common.MimeImageJPG:
 		return ".jpg"
 	default:
 		ext := strings.ToLower(filepath.Ext(original))

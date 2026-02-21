@@ -12,6 +12,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/jo-hoe/gostwriter/internal/common"
 	appcfg "github.com/jo-hoe/gostwriter/internal/config"
 	"github.com/jo-hoe/gostwriter/internal/targets"
 )
@@ -128,7 +129,7 @@ func (t *Target) cloneRepo(ctx context.Context, repoDir string) error {
 		return fmt.Errorf("git clone: %w", err)
 	}
 	// Set remote back to tokenless URL to avoid storing secret in .git/config
-	if err := runGit(ctx, repoDir, "remote", "set-url", "origin", t.cfg.RepoURL); err != nil {
+	if err := runGit(ctx, repoDir, "remote", "set-url", common.GitRemoteName, t.cfg.RepoURL); err != nil {
 		// Not fatal, but warn
 		return fmt.Errorf("git remote set-url: %w", err)
 	}
@@ -140,8 +141,8 @@ func (t *Target) syncRepo(ctx context.Context, repoDir string) error {
 	// Ensure branch is checked out
 	if err := runGit(ctx, repoDir, "checkout", branch); err != nil {
 		// Try to create tracking branch from origin
-		_ = runGit(ctx, repoDir, "fetch", "origin")
-		if err2 := runGit(ctx, repoDir, "checkout", "-b", branch, "--track", "origin/"+branch); err2 != nil {
+		_ = runGit(ctx, repoDir, "fetch", common.GitRemoteName)
+		if err2 := runGit(ctx, repoDir, "checkout", "-b", branch, "--track", fmt.Sprintf("%s/%s", common.GitRemoteName, branch)); err2 != nil {
 			return fmt.Errorf("git checkout %s: %w", branch, err)
 		}
 	}
@@ -151,16 +152,16 @@ func (t *Target) syncRepo(ctx context.Context, repoDir string) error {
 	if err != nil {
 		return fmt.Errorf("auth url: %w", err)
 	}
-	if err := runGit(ctx, repoDir, "remote", "set-url", "origin", authURL); err != nil {
+	if err := runGit(ctx, repoDir, "remote", "set-url", common.GitRemoteName, authURL); err != nil {
 		return fmt.Errorf("set auth remote: %w", err)
 	}
 	defer func() {
-		_ = runGit(context.Background(), repoDir, "remote", "set-url", "origin", t.cfg.RepoURL)
+		_ = runGit(context.Background(), repoDir, "remote", "set-url", common.GitRemoteName, t.cfg.RepoURL)
 	}()
 
 	// Fetch and hard reset to origin/branch to ensure clean state
-	_ = runGit(ctx, repoDir, "fetch", "origin", "--depth", "1")
-	if err := runGit(ctx, repoDir, "reset", "--hard", "origin/"+branch); err != nil {
+	_ = runGit(ctx, repoDir, "fetch", common.GitRemoteName, "--depth", "1")
+	if err := runGit(ctx, repoDir, "reset", "--hard", fmt.Sprintf("%s/%s", common.GitRemoteName, branch)); err != nil {
 		return fmt.Errorf("git reset --hard origin/%s: %w", branch, err)
 	}
 	return nil
@@ -256,7 +257,7 @@ func runGit(ctx context.Context, dir string, args ...string) error {
 }
 
 func runGitWithOutput(ctx context.Context, dir string, stdout, stderr *bytes.Buffer, args ...string) error {
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, common.GitExecutable, args...)
 	if dir != "" {
 		cmd.Dir = dir
 	}
@@ -295,7 +296,7 @@ func isNothingToCommit(err error) bool {
 
 // Safety check to ensure git is available (optional invocation before use).
 func ensureGitAvailable() error {
-	if _, err := exec.LookPath("git"); err != nil {
+	if _, err := exec.LookPath(common.GitExecutable); err != nil {
 		return errors.New("git executable not found in PATH")
 	}
 	return nil

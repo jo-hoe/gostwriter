@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jo-hoe/gostwriter/internal/common"
 	"github.com/jo-hoe/gostwriter/internal/config"
 	"github.com/jo-hoe/gostwriter/internal/jobs"
 	"github.com/jo-hoe/gostwriter/internal/storage"
@@ -30,14 +32,14 @@ type Service struct {
 // NewHTTPServer builds the http.Server with routes and middleware.
 func NewHTTPServer(svc *Service) *http.Server {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+	mux.HandleFunc(http.MethodGet+" "+common.PathHealthz, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", common.ContentTypeJSON)
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
 
-	mux.HandleFunc("POST /v1/transcriptions", svc.withCommon(svc.handleCreateTranscription))
+	mux.HandleFunc(http.MethodPost+" "+common.PathTranscriptions, svc.withCommon(svc.handleCreateTranscription))
 	// Pattern match /v1/transcriptions/{id}
-	mux.HandleFunc("GET /v1/transcriptions/", svc.withCommon(svc.handleGetTranscriptionByPrefix))
+	mux.HandleFunc(http.MethodGet+" "+common.PathTranscriptions+"/", svc.withCommon(svc.handleGetTranscriptionByPrefix))
 
 	s := &http.Server{
 		Addr:         svc.Cfg.Server.Addr,
@@ -53,7 +55,7 @@ func (svc *Service) withCommon(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Enforce API key if configured
 		if key := strings.TrimSpace(svc.Cfg.Server.APIKey); key != "" {
-			if r.Header.Get("X-API-Key") != key {
+			if r.Header.Get(common.HeaderAPIKey) != key {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
@@ -145,8 +147,8 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 			}
 			return callbackURLPtr
 		}(),
-		Title:    titlePtr,
-		Metadata: metadata,
+		Title:     titlePtr,
+		Metadata:  metadata,
 		Stage:     jobs.StageQueued,
 		CreatedAt: time.Now().UTC(),
 	}
@@ -157,8 +159,8 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 	}
 
 	// Determine sync vs async based on Prefer header
-	prefer := strings.ToLower(strings.TrimSpace(r.Header.Get("Prefer")))
-	async := strings.Contains(prefer, "respond-async")
+	prefer := strings.ToLower(strings.TrimSpace(r.Header.Get(common.HeaderPrefer)))
+	async := strings.Contains(prefer, common.PreferRespondAsync)
 
 	if async {
 		// Enqueue for async processing; transfer cleanup responsibility to worker on success
@@ -174,11 +176,11 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 		// We handed cleanup to the worker. Prevent double-delete here.
 		cleanup = nil
 
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", common.ContentTypeJSON)
 		w.WriteHeader(http.StatusAccepted)
 		resp := createResponse{
 			JobID:     jobID,
-			StatusURL: path.Join("/v1/transcriptions", jobID),
+			StatusURL: path.Join(common.PathTranscriptions, jobID),
 		}
 		_ = json.NewEncoder(w).Encode(resp)
 		return
@@ -217,12 +219,12 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 			Commit:   deref(finalJob.TargetCommit),
 		}
 	}
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", common.ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-var idPattern = regexp.MustCompile(`^/v1/transcriptions/([a-f0-9-]+)$`)
+var idPattern = regexp.MustCompile(fmt.Sprintf("^%s/([a-f0-9-]+)$", common.PathTranscriptions))
 
 func (svc *Service) handleGetTranscriptionByPrefix(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -262,7 +264,7 @@ func (svc *Service) handleGetTranscriptionByPrefix(w http.ResponseWriter, r *htt
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", common.ContentTypeJSON)
 	_ = json.NewEncoder(w).Encode(out)
 }
 
@@ -276,7 +278,7 @@ func deref(p *string) string {
 func loggingMiddleware(next http.Handler, log *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		ww := &writeWrap{ResponseWriter: w, code: 200}
+		ww := &writeWrap{ResponseWriter: w, code: http.StatusOK}
 		next.ServeHTTP(ww, r)
 		log.Info("http",
 			"method", r.Method,
@@ -307,4 +309,3 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-
