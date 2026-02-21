@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -276,6 +277,10 @@ func deref(p *string) string {
 }
 
 func loggingMiddleware(next http.Handler, log *slog.Logger) http.Handler {
+	// Fallback to a discard logger if none provided to avoid nil deref in tests or minimal setups.
+	if log == nil {
+		log = slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		ww := &writeWrap{ResponseWriter: w, code: http.StatusOK}

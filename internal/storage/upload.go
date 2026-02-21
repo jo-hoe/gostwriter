@@ -33,7 +33,8 @@ func (u *Uploader) SaveMultipartImage(fileHeader *multipart.FileHeader, maxBytes
 		return "", nil, "", fmt.Errorf("no file provided")
 	}
 	mimeType := fileHeader.Header.Get("Content-Type")
-	if mimeType == "" {
+	// Some clients set application/octet-stream for uploads; treat it as unknown and fall back to extension.
+	if mimeType == "" || strings.EqualFold(strings.TrimSpace(mimeType), "application/octet-stream") {
 		// Fallback: try to detect by extension
 		ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
 		mimeType = mime.TypeByExtension(ext)
