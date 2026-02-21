@@ -58,7 +58,7 @@ func TestLoad_WithEnvAndDefaults_SingleTarget(t *testing.T) {
 
 	yaml := `
 server:
-  addr: ":0"
+  address: ":0"
   readTimeout: 1s
   writeTimeout: 2s
   idleTimeout: 3s
@@ -104,7 +104,7 @@ target:
 
 	// Server assertions
 	if cfg.Server.Addr != ":0" {
-		t.Fatalf("addr = %q", cfg.Server.Addr)
+		t.Fatalf("address = %q", cfg.Server.Addr)
 	}
 	if cfg.Server.ReadTimeout != 1*time.Second || cfg.Server.WriteTimeout != 2*time.Second || cfg.Server.IdleTimeout != 3*time.Second {
 		t.Fatalf("timeouts not parsed correctly")

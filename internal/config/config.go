@@ -22,7 +22,7 @@ type Config struct {
 
 // ServerConfig holds HTTP server and runtime settings.
 type ServerConfig struct {
-	Addr            string        `yaml:"addr"`
+	Addr            string        `yaml:"address"`
 	ReadTimeout     time.Duration `yaml:"readTimeout"`
 	WriteTimeout    time.Duration `yaml:"writeTimeout"`
 	IdleTimeout     time.Duration `yaml:"idleTimeout"`

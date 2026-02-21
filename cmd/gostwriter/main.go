@@ -94,7 +94,7 @@ func main() {
 	// Run server in background
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("http server starting", "addr", cfg.Server.Addr)
+		logger.Info("http server starting", "address", cfg.Server.Addr)
 		if err := httpSrv.ListenAndServe(); err != nil && err.Error() != "http: Server closed" {
 			errCh <- err
 		}

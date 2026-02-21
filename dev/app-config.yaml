@@ -1,7 +1,7 @@
 # Local docker-compose config for Gostwriter
-# Copy/modify as needed. Secrets like GIT_TOKEN are provided via environment (.env) or compose env.
+# Provide all configuration and secrets via this file only; do not use environment variables.
 server:
-  addr: ":8080"
+  address: ":8080"
   readTimeout: 15s
   writeTimeout: 30s
   idleTimeout: 60s
@@ -36,5 +36,5 @@ target:
   auth:
     type: "basic"
     username: "git"
-    # This will be expanded from the container env var GIT_TOKEN provided by docker-compose
-    token: "${GIT_TOKEN}"
+    # IMPORTANT: Provide your token here in this local file for compose runs (do not commit real tokens)
+    token: ""

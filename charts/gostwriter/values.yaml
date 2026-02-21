@@ -3,37 +3,37 @@ image:
   pullPolicy: IfNotPresent
   tag: ""
 
-# Secrets to use for pulling images (for private registries)
+# -- Secrets to use for pulling images (for private registries)
 imagePullSecrets: []
-# Partially override the chart name
+# -- Partially override the chart name
 nameOverride: ""
-# Fully override the release name
+# -- Fully override the release name
 fullnameOverride: ""
 
-# Number of desired pod replicas
+# -- Number of desired pod replicas
 replicaCount: 1
 
 serviceAccount:
-  # Specifies whether a service account should be created
+  # -- Specifies whether a service account should be created
   create: true
-  # Automatically mount a ServiceAccount's API credentials
+  # -- Automatically mount a ServiceAccount's API credentials
   automount: true
-  # Annotations to add to the service account
+  # -- Annotations to add to the service account
   annotations: {}
-  # The name of the service account to use.
+  # -- The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
 
-# Annotations to add to the Pod
+# -- Annotations to add to the Pod
 podAnnotations: {}
-# Additional labels to add to the Pod
+# -- Additional labels to add to the Pod
 podLabels: {}
 
-# Pod-level security context
+# -- Pod-level security context
 podSecurityContext: {}
   # fsGroup: 2000
 
-# Container-level security context
+# -- Container-level security context
 securityContext: {}
   # capabilities:
   #   drop:
@@ -43,30 +43,30 @@ securityContext: {}
   # runAsUser: 1000
 
 service:
-  # Kubernetes Service type
+  # -- Kubernetes Service type
   type: ClusterIP
-  # Service port
+  # -- Service port
   port: 80
-  # Target container port exposed by the application
+  # -- Target container port exposed by the application
   targetPort: 8080
 
 ingress:
-  # Enable Ingress
+  # -- Enable Ingress
   enabled: false
-  # IngressClass name
+  # -- IngressClass name
   className: ""
-  # Annotations to add to the Ingress
+  # -- Annotations to add to the Ingress
   annotations: {}
-  # Ingress host definitions
+  # -- Ingress host definitions
   hosts:
     - host: gostwriter.local
       paths:
         - path: /
           pathType: Prefix
-  # TLS configuration for the Ingress
+  # -- TLS configuration for the Ingress
   tls: []
 
-# Resource requests and limits for the container
+# -- Resource requests and limits for the container
 resources: {}
   # Example:
   # limits:
@@ -76,16 +76,16 @@ resources: {}
   #   cpu: 100m
   #   memory: 128Mi
 
-# Node selector for Pod assignment
+# -- Node selector for Pod assignment
 nodeSelector: {}
 
-# Tolerations for Pod assignment
+# -- Tolerations for Pod assignment
 tolerations: []
 
-# Affinity rules for Pod scheduling
+# -- Affinity rules for Pod scheduling
 affinity: {}
 
-# Persistence for /app/data (SQLite DB and git clone cache)
+# -- Persistence for /app/data (SQLite DB and git clone cache)
 persistence:
   enabled: false
   existingClaim: ""
@@ -94,13 +94,17 @@ persistence:
     - ReadWriteOnce
   size: 1Gi
 
-# Either provide a raw config.yaml or let the chart render from values below.
-# Prefer to inject via Helm --set-file configRaw=path/to/config.yaml for advanced setups.
+# -- Provide application configuration via file only (never env):
+# By default, the chart renders the config as a Secret and mounts it at /app/config/config.yaml
+configAsSecret: true
+# -- Reference an existing Secret that contains a `config.yaml` key (overrides chart-generated Secret/ConfigMap)
+existingConfigSecret: ""
+# -- Or provide raw config.yaml content (string). Prefer helm --set-file configRaw=path/to/config.yaml
 configRaw: ""
 
-# Structured configuration rendered into config.yaml (used when configRaw is empty)
+# -- Structured configuration rendered into config.yaml (used only when configRaw is empty)
 server:
-  addr: ":8080"
+  address: ":8080"
   readTimeout: 15s
   writeTimeout: 30s
   idleTimeout: 60s
@@ -119,7 +123,9 @@ llm:
     delay: 2s
     prefix: "Transcribed by Mock"
 
-# Single target configuration (git)
+# -- Single target configuration (git)
+# IMPORTANT: For Kubernetes, do NOT use env expansion inside the config.
+# Provide the token directly inside a Secret-backed config.yaml (via configRaw or existingConfigSecret).
 target:
   type: "git"
   name: "docs-main"
@@ -133,38 +139,5 @@ target:
   cloneCacheDir: ""
   auth:
     type: "basic"
-    # Username often 'git' for GitHub, can be overridden as needed
     username: "git"
-    # Name of the environment variable that holds the token (mounted from a Secret)
-    tokenVarName: "GIT_TOKEN"
-
-# Base environment variables to inject
-env:
-  - name: GOSTWRITER_CONFIG
-    value: /app/config/config.yaml
-
-# Extra environment variables to inject into the container
-extraEnv: []
-# - name: EXAMPLE
-#   value: "value"
-
-# Extra environment sources (e.g., ConfigMaps or Secrets)
-extraEnvFrom: []
-# - secretRef:
-#     name: my-secret
-
-# Create a Kubernetes Secret for sensitive env vars (e.g., GIT_TOKEN, GOSTWRITER_API_KEY).
-# If you use an existing secret, set secretEnv.create=false and specify existingSecret below.
-secretEnv:
-  create: true
-  # If empty and create=true, a name will be generated from the release name
-  name: ""
-  # Key-value string data to create in the Secret. Do not commit real secrets.
-  # Example:
-  # data:
-  #   GIT_TOKEN: "ghp_xxx"
-  #   GOSTWRITER_API_KEY: "super-secret"
-  data: {}
-
-# Reference an existing secret instead of creating one
-existingSecret: ""
+    token: ""

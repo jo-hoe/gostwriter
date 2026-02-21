@@ -16,12 +16,8 @@ ingress:
           pathType: Prefix
   tls: []
 
-# Use an existing Secret to supply sensitive env (e.g., GIT_TOKEN, optional API key)
-# Create this secret before install:
-#   kubectl -n default create secret generic gostwriter-secrets --from-literal=GIT_TOKEN=... [--from-literal=GOSTWRITER_API_KEY=...]
-existingSecret: "gostwriter-secrets"
+# Provide config via existing Secret containing key 'config.yaml'
+# Create this Secret before install, using your complete config file (with tokens included):
+#   kubectl -n default create secret generic gostwriter-config --from-file=config.yaml=path/to/your/config.yaml
+existingConfigSecret: "gostwriter-config"
 
-# Ensure the token env var placeholder used in the rendered config matches your secret key
-target:
-  auth:
-    tokenVarName: "GIT_TOKEN"

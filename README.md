@@ -39,7 +39,7 @@ Notes:
 
 Example
 server:
-  addr: ":8080"
+  address: ":8080"
   readTimeout: 15s
   writeTimeout: 30s
   idleTimeout: 60s
