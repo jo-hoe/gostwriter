@@ -104,50 +104,85 @@ configRaw: ""
 
 # -- Structured configuration rendered into config.yaml (used only when configRaw is empty)
 server:
+  # -- HTTP bind address
   address: ":8080"
+  # -- Maximum time to read the entire request (headers + body)
   readTimeout: 15s
+  # -- Maximum time to process and write the response for a request
   writeTimeout: 2m
+  # -- Keep-alive idle timeout for connections (no effect on in-flight requests)
   idleTimeout: 60s
+  # -- Max allowed upload size (e.g., 10Mi, 20MB)
   maxUploadSize: 10Mi
+  # -- Number of worker goroutines processing jobs
   workerCount: 4
+  # -- Directory inside the container where data is stored (DB, git cache)
   storageDir: "/app/data"
+  # -- Optional static API key required via X-API-Key header
   apiKey: ""
+  # -- SQLite DB path; default storageDir/gostwriter.db if empty
   databasePath: ""
+  # -- Grace period on shutdown to wait for workers to finish
   shutdownGrace: 15s
+  # -- Number of times to retry webhook callbacks
   callbackRetries: 3
+  # -- Base backoff duration between callback retries
   callbackBackoff: 2s
 
 llm:
+  # -- Provider selection: "mock" or "aiproxy"
   provider: "mock"
   aiproxy:
+    # -- Base URL for AI Proxy (OpenAI-compatible) endpoint
     baseUrl: "http://localhost:8900"
+    # -- API key for the AI Proxy (optional)
     apiKey: ""
+    # -- Model name to use
     model: "gpt-5"
+    # -- Optional system prompt override
     systemPrompt: ""
+    # -- Optional instructions prompt override
     instructions: ""
+    # -- Sampling temperature
     temperature: 0
+    # -- Maximum tokens for responses (0 uses provider default)
     maxTokens: 0
   mock:
+    # -- Artificial delay for mock responses
     delay: 2s
+    # -- Prefix added by the mock provider
     prefix: "Transcribed by Mock"
 
 # -- Single target configuration (git)
 # IMPORTANT: For Kubernetes, do NOT use env expansion inside the config.
 # Provide the token directly inside a Secret-backed config.yaml (via configRaw or existingConfigSecret).
 target:
+  # -- Target type: only "git" is supported
   type: "git"
+  # -- Logical name used to address the target
   name: "docs-main"
+  # -- HTTPS repository URL to push content to
   repoUrl: "https://github.com/yourorg/yourrepo.git"
+  # -- Branch to use for commits
   branch: "main"
+  # -- Base path in the repo where files are written
   basePath: "inbox/"
+  # -- Go text/template for filename; has .Timestamp, .JobID, etc.
   filenameTemplate: '{{ .Timestamp.Format "20060102-150405" }}-{{ .JobID }}.md'
+  # -- Go text/template for commit message
   commitMessageTemplate: "Add transcription {{ .JobID }}"
+  # -- Commit author name used for git operations
   authorName: "Gostwriter Bot"
+  # -- Commit author email used for git operations
   authorEmail: "bot@example.com"
+  # -- Optional override for the clone cache location inside the container
   cloneCacheDir: ""
   auth:
+    # -- Authentication type; only "basic" is supported (username + token)
     type: "basic"
+    # -- Username for HTTPS auth (often "git")
     username: "git"
+    # -- Personal access token / password for HTTPS auth
     token: ""
 
 # -- Optional Kubernetes CronJob for scheduled tasks
