@@ -187,16 +187,9 @@ func TestCreateTranscription_Synchronous200(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var resp map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("json: %v", err)
-	}
-	if resp["stage"] != string(jobs.StageCompleted) {
-		t.Fatalf("stage not completed: %v", resp["stage"])
-	}
-	tr, ok := resp["target_result"].(map[string]any)
-	if !ok || tr["commit"] == "" {
-		t.Fatalf("target_result missing: %v", tr)
+	// In synchronous mode, the response body must be empty (no details leaked)
+	if strings.TrimSpace(rec.Body.String()) != "" {
+		t.Fatalf("expected empty body for sync success, got: %q", rec.Body.String())
 	}
 }
 

@@ -17,6 +17,8 @@ server:
   shutdownGrace: 15s
   callbackRetries: 3
   callbackBackoff: 2s
+  # Log level: debug|info|warn|error
+  logLevel: "info"
 
 llm:
   provider: "aiproxy"

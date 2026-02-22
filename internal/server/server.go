@@ -138,8 +138,14 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 	}
 
 	if err := svc.Store.CreateJob(&job); err != nil {
-		http.Error(w, "persist job: "+err.Error(), http.StatusInternalServerError)
+		if svc.Log != nil {
+			svc.Log.Error("persist job", "error", err)
+		}
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
+	}
+	if svc.Log != nil {
+		svc.Log.Info("job created", "job_id", jobID, "target", targetName)
 	}
 
 	// Determine sync vs async based on Prefer header
@@ -157,6 +163,9 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 			http.Error(w, "queue full, try later", http.StatusServiceUnavailable)
 			return
 		}
+		if svc.Log != nil {
+			svc.Log.Info("job enqueued", "job_id", jobID)
+		}
 		// We handed cleanup to the worker. Prevent double-delete here.
 		cleanup = nil
 
@@ -169,18 +178,19 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 
 	// Synchronous processing path: process the job inline and return result.
 	if err := svc.Processor.Process(r.Context(), jobs.WorkItem{Job: job}); err != nil {
-		http.Error(w, "processing failed: "+err.Error(), http.StatusInternalServerError)
+		if svc.Log != nil {
+			svc.Log.Error("processing failed", "error", err)
+		}
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
-	// Fetch final job state to include result
-	finalJob, err := svc.Store.GetJob(jobID)
-	if err != nil || finalJob == nil {
-		http.Error(w, "processed but status unavailable", http.StatusInternalServerError)
-		return
+	// Synchronous success: return 200 with no details
+	if svc.Log != nil {
+		svc.Log.Info("job processed (sync)", "job_id", jobID)
 	}
-
-	writeJSON(w, http.StatusOK, jobToOut(finalJob))
+	w.WriteHeader(http.StatusOK)
+	return
 }
 
 var idPattern = regexp.MustCompile(fmt.Sprintf("^%s/([a-f0-9-]+)$", common.PathTranscriptions))
@@ -218,13 +228,17 @@ func jobToOut(job *jobs.Job) map[string]any {
 		Location string `json:"location"`
 		Commit   string `json:"commit"`
 	}
+	var errVal any = nil
+	if job.ErrorMessage != nil && *job.ErrorMessage != "" {
+		errVal = "internal error"
+	}
 	out := map[string]any{
 		"job_id":       job.ID,
 		"stage":        string(job.Stage),
 		"created_at":   job.CreatedAt,
 		"started_at":   job.StartedAt,
 		"completed_at": job.CompletedAt,
-		"error":        job.ErrorMessage,
+		"error":        errVal,
 	}
 	if job.TargetLocation != nil || job.TargetCommit != nil {
 		out["target_result"] = result{

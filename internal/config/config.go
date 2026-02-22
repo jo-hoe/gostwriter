@@ -34,6 +34,7 @@ type ServerConfig struct {
 	ShutdownGrace   time.Duration `yaml:"shutdownGrace"`   // time to wait for workers before forced stop
 	CallbackRetries int           `yaml:"callbackRetries"` // number of callback attempts
 	CallbackBackoff time.Duration `yaml:"callbackBackoff"` // base backoff duration
+	LogLevel        string        `yaml:"logLevel"`        // debug|info|warn|error
 }
 
 // LLMConfig selects provider and provider-specific options.
@@ -239,6 +240,10 @@ func applyDefaults(cfg *Config) {
 	}
 	if cfg.Server.CallbackBackoff == 0 {
 		cfg.Server.CallbackBackoff = 2 * time.Second
+	}
+	// Default log level
+	if strings.TrimSpace(cfg.Server.LogLevel) == "" {
+		cfg.Server.LogLevel = "info"
 	}
 
 	// LLM defaults

@@ -46,6 +46,9 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 	if err := w.Store.UpdateStage(job.ID, jobs.StageTranscribing, &now); err != nil {
 		return fmt.Errorf("update stage to transcribing: %w", err)
 	}
+	if w.Log != nil {
+		w.Log.Info("job transcribing", "job_id", job.ID)
+	}
 
 	f, err := os.Open(job.ImagePath)
 	if err != nil {
@@ -59,6 +62,9 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 		w.finishWithError(job.ID, fmt.Errorf("llm transcribe: %w", err))
 		return err
 	}
+	if w.Log != nil {
+		w.Log.Info("transcription completed", "job_id", job.ID)
+	}
 
 	// Optionally prepend title as Markdown H1.
 	if job.Title != nil && *job.Title != "" {
@@ -70,6 +76,9 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 	if err := w.Store.UpdateStage(job.ID, jobs.StagePosting, &startPost); err != nil {
 		w.finishWithError(job.ID, fmt.Errorf("update stage to posting: %w", err))
 		return err
+	}
+	if w.Log != nil {
+		w.Log.Info("job posting", "job_id", job.ID, "target", job.TargetName)
 	}
 
 	t, ok := w.Targets.Get(job.TargetName)
@@ -91,11 +100,17 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 		w.finishWithError(job.ID, fmt.Errorf("target post: %w", err))
 		return err
 	}
+	if w.Log != nil {
+		w.Log.Info("post completed", "job_id", job.ID, "target", res.TargetName, "location", res.Location, "commit", res.Commit)
+	}
 
 	// Success
 	done := time.Now().UTC()
 	if err := w.Store.SaveResult(job.ID, res.Location, res.Commit, done); err != nil {
 		return fmt.Errorf("save result: %w", err)
+	}
+	if w.Log != nil {
+		w.Log.Info("job completed", "job_id", job.ID)
 	}
 
 	// Callback if provided
@@ -122,6 +137,9 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 func (w *Worker) finishWithError(jobID string, err error) {
 	done := time.Now().UTC()
 	_ = w.Store.SaveError(jobID, err.Error(), done)
+	if w.Log != nil {
+		w.Log.Error("job failed", "job_id", jobID, "error", err)
+	}
 }
 
 type callbackPayload struct {

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/jo-hoe/gostwriter/internal/common"
@@ -21,8 +22,21 @@ import (
 	gitTarget "github.com/jo-hoe/gostwriter/internal/targets/git"
 )
 
+func parseLogLevel(s string) slog.Level {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "debug":
+		return slog.LevelDebug
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
+
 func main() {
-	// Logger
+	// Provisional logger during early startup
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 
@@ -32,6 +46,11 @@ func main() {
 		logger.Error("load config", "err", err)
 		os.Exit(1)
 	}
+
+	// Reconfigure logger with configured level
+	lvl := parseLogLevel(cfg.Server.LogLevel)
+	logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: lvl}))
+	slog.SetDefault(logger)
 
 	// Store (SQLite)
 	store, err := jobs.NewSQLiteStore(cfg.Server.DatabasePath)
