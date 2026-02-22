@@ -21,7 +21,9 @@ server:
 llm:
   provider: "aiproxy"
   aiproxy:
-    baseUrl: "http://localhost:8900"
+    # When running via Docker Compose, use host.docker.internal to reach services on the host machine.
+    # This resolves to the host gateway on Docker Desktop and on Linux with Docker 20.10+.
+    baseUrl: "http://host.docker.internal:8900"
     apiKey: "${AIPROXY_API_KEY}"
     model: "gpt-5"
     systemPrompt: ""
