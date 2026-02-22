@@ -93,7 +93,7 @@ target:
     username: "git"
     token: "${GIT_TOKEN}"
 `
-	if err := os.WriteFile(cfgPath, []byte(yaml), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte(yaml), 0o600); err != nil {
 		t.Fatalf("write cfg: %v", err)
 	}
 

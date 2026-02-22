@@ -38,7 +38,7 @@ func New(name string, cfg appcfg.GitTargetConfig, cacheRoot string) (*Target, er
 	if cacheRoot == "" {
 		return nil, fmt.Errorf("cacheRoot must not be empty")
 	}
-	if err := os.MkdirAll(cacheRoot, 0o755); err != nil {
+	if err := os.MkdirAll(cacheRoot, 0o750); err != nil {
 		return nil, fmt.Errorf("ensure cache root: %w", err)
 	}
 	return &Target{
@@ -109,10 +109,10 @@ func (t *Target) ensureRepo(ctx context.Context, repoDir string) error {
 
 func (t *Target) writeContent(repoDir, filename, markdown string) (fullPath, relPath string, err error) {
 	fullPath = filepath.Join(repoDir, filename)
-	if err = os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+	if err = os.MkdirAll(filepath.Dir(fullPath), 0o750); err != nil {
 		return "", "", fmt.Errorf("ensure dir: %w", err)
 	}
-	if err = os.WriteFile(fullPath, []byte(markdown), 0o644); err != nil {
+	if err = os.WriteFile(fullPath, []byte(markdown), 0o600); err != nil {
 		return "", "", fmt.Errorf("write file: %w", err)
 	}
 	relPath, relErr := filepath.Rel(repoDir, fullPath)
@@ -380,7 +380,7 @@ func runGit(ctx context.Context, dir string, args ...string) error {
 }
 
 func runGitWithOutput(ctx context.Context, dir string, stdout, stderr *bytes.Buffer, args ...string) error {
-	cmd := exec.CommandContext(ctx, common.GitExecutable, args...)
+	cmd := exec.CommandContext(ctx, common.GitExecutable, args...) // #nosec G204 - command uses fixed executable with controlled args (no shell)
 	if dir != "" {
 		cmd.Dir = dir
 	}

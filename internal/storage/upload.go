@@ -49,7 +49,7 @@ func (u *Uploader) SaveMultipartImage(fileHeader *multipart.FileHeader, maxBytes
 		return "", nil, "", fmt.Errorf("unsupported content type: %s", mimeType)
 	}
 
-	if err := os.MkdirAll(u.baseDir, 0o755); err != nil {
+	if err := os.MkdirAll(u.baseDir, 0o750); err != nil {
 		return "", nil, "", fmt.Errorf("ensure uploads dir: %w", err)
 	}
 
@@ -62,8 +62,14 @@ func (u *Uploader) SaveMultipartImage(fileHeader *multipart.FileHeader, maxBytes
 	ext := pickExtension(mimeType, fileHeader.Filename)
 	filename := fmt.Sprintf("%s%s", randomHex(16), ext)
 	dstPath := filepath.Join(u.baseDir, filename)
+	// Ensure the destination path stays within the base uploads directory to prevent path traversal.
+	base := filepath.Clean(u.baseDir)
+	cleanDst := filepath.Clean(dstPath)
+	if rel, err := filepath.Rel(base, cleanDst); err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		return "", nil, "", fmt.Errorf("invalid destination path")
+	}
 
-	dst, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o644)
+	dst, err := os.OpenFile(cleanDst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o600) // #nosec G304 - path validated against base uploads dir above
 	if err != nil {
 		return "", nil, "", fmt.Errorf("create tmp file: %w", err)
 	}
@@ -73,14 +79,14 @@ func (u *Uploader) SaveMultipartImage(fileHeader *multipart.FileHeader, maxBytes
 
 	limited := io.LimitReader(src, maxBytes)
 	if _, err := io.Copy(dst, limited); err != nil {
-		_ = os.Remove(dstPath)
+		_ = os.Remove(cleanDst)
 		return "", nil, "", fmt.Errorf("copy upload: %w", err)
 	}
 
 	cleanup := func() error {
-		return os.Remove(dstPath)
+		return os.Remove(cleanDst)
 	}
-	return dstPath, cleanup, mimeType, nil
+	return cleanDst, cleanup, mimeType, nil
 }
 
 func isAllowedImageMime(mimeType string) bool {

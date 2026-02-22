@@ -1,12 +1,14 @@
 package common
 
+//nolint:gosec // false positive in tests: comparing HTTP header constant string; not a credential
+
 import "testing"
 
 func TestConstantsValues(t *testing.T) {
 	if ContentTypeJSON != "application/json" {
 		t.Fatalf("ContentTypeJSON = %q", ContentTypeJSON)
 	}
-	if HeaderAPIKey != "X-API-Key" {
+	if HeaderAPIKey != "X-API-Key" { //nolint:gosec // test verifies header constant; this is not a credential
 		t.Fatalf("HeaderAPIKey = %q", HeaderAPIKey)
 	}
 	if HeaderPrefer != "Prefer" {

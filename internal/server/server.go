@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"io"
 	"log/slog"
 	"net/http"
@@ -61,7 +62,7 @@ func (svc *Service) withCommon(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 		// Enforce max body size
-		max := int64(svc.Cfg.Server.MaxUploadSize)
+		max := safeInt64(svc.Cfg.Server.MaxUploadSize)
 		if max > 0 {
 			r.Body = http.MaxBytesReader(w, r.Body, max)
 		}
@@ -80,7 +81,7 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 		return
 	}
 	// Parse multipart
-	if err := r.ParseMultipartForm(int64(svc.Cfg.Server.MaxUploadSize)); err != nil {
+	if err := r.ParseMultipartForm(safeInt64(svc.Cfg.Server.MaxUploadSize)); err != nil {
 		http.Error(w, "invalid form: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -110,7 +111,7 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 	}
 
 	// Store upload
-	imgPath, cleanup, mimeType, err := svc.Uploader.SaveMultipartImage(uploaded, int64(svc.Cfg.Server.MaxUploadSize))
+	imgPath, cleanup, mimeType, err := svc.Uploader.SaveMultipartImage(uploaded, safeInt64(svc.Cfg.Server.MaxUploadSize))
 	if err != nil {
 		http.Error(w, "upload failed: "+err.Error(), http.StatusBadRequest)
 		return
@@ -255,6 +256,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 		w.WriteHeader(status)
 	}
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func safeInt64(u config.ByteSize) int64 {
+	if u > config.ByteSize(math.MaxInt64) {
+		return math.MaxInt64
+	}
+	return int64(u) // #nosec G115 - safe cast after explicit upper-bound check
 }
 
 func parseOptionalURL(s string) (*string, error) {

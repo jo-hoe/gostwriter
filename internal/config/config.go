@@ -174,7 +174,8 @@ func Load(path string) (*Config, error) {
 			path = "config.yaml"
 		}
 	}
-	data, err := os.ReadFile(path)
+	cleanPath := filepath.Clean(path)
+	data, err := os.ReadFile(cleanPath) // #nosec G304 - reading sanitized config file path is expected
 	if err != nil {
 		return nil, fmt.Errorf("read config: %w", err)
 	}
@@ -198,7 +199,7 @@ func Load(path string) (*Config, error) {
 
 	// Ensure storage dir exists
 	if cfg.Server.StorageDir != "" {
-		if err := os.MkdirAll(cfg.Server.StorageDir, 0o755); err != nil {
+		if err := os.MkdirAll(cfg.Server.StorageDir, 0o750); err != nil {
 			return nil, fmt.Errorf("ensure storage_dir: %w", err)
 		}
 	}

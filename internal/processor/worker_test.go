@@ -168,7 +168,7 @@ func TestWorker_Process_SuccessWithCallback(t *testing.T) {
 
 	// Temp image file
 	imgPath := filepathJoin(t.TempDir(), "img.png")
-	if err := os.WriteFile(imgPath, []byte("fakeimg"), 0o644); err != nil {
+	if err := os.WriteFile(imgPath, []byte("fakeimg"), 0o600); err != nil {
 		t.Fatalf("write img: %v", err)
 	}
 
@@ -235,7 +235,7 @@ func TestWorker_Process_LLMError_SetsFailed(t *testing.T) {
 
 	// Temp image file
 	imgPath := filepathJoin(t.TempDir(), "img.png")
-	if err := os.WriteFile(imgPath, []byte("fakeimg"), 0o644); err != nil {
+	if err := os.WriteFile(imgPath, []byte("fakeimg"), 0o600); err != nil {
 		t.Fatalf("write img: %v", err)
 	}
 

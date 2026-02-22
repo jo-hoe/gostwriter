@@ -4,7 +4,7 @@ package common
 
 // HTTP headers and content types
 const (
-	HeaderAPIKey       = "X-API-Key"
+	HeaderAPIKey       = "X-API-Key" // #nosec G101 - header name constant, not a credential
 	HeaderPrefer       = "Prefer"
 	PreferRespondAsync = "respond-async"
 	ContentTypeJSON    = "application/json"

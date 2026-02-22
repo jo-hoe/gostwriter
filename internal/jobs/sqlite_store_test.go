@@ -37,7 +37,7 @@ func TestSQLiteStore_JobLifecycle(t *testing.T) {
 	}
 
 	// Create a fake image file path for completeness (store doesn't validate it)
-	if err := os.WriteFile(job.ImagePath, []byte("fake"), 0o644); err != nil {
+	if err := os.WriteFile(job.ImagePath, []byte("fake"), 0o600); err != nil {
 		t.Fatalf("write img: %v", err)
 	}
 
