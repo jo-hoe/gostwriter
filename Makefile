@@ -21,7 +21,7 @@ update: ## update dependencies
 
 .PHONY: lint
 lint: ## run linters
-	golangci-lint run
+	golangci-lint run -E dupl -E gocyclo
 
 .PHONY: test
 test: ## run go tests with coverage
