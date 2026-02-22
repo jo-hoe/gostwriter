@@ -12,6 +12,7 @@ import (
 	appcfg "github.com/jo-hoe/gostwriter/internal/config"
 	"github.com/jo-hoe/gostwriter/internal/jobs"
 	"github.com/jo-hoe/gostwriter/internal/llm"
+	"github.com/jo-hoe/gostwriter/internal/llm/aiproxy"
 	"github.com/jo-hoe/gostwriter/internal/llm/mock"
 	"github.com/jo-hoe/gostwriter/internal/processor"
 	"github.com/jo-hoe/gostwriter/internal/server"
@@ -64,6 +65,8 @@ func main() {
 	switch cfg.LLM.Provider {
 	case "mock":
 		llmClient = mock.New(cfg.LLM.Mock)
+	case "aiproxy":
+		llmClient = aiproxy.New(cfg.LLM.AIProxy)
 	default:
 		logger.Error("unsupported llm provider", "provider", cfg.LLM.Provider)
 		os.Exit(1)

@@ -38,14 +38,26 @@ type ServerConfig struct {
 
 // LLMConfig selects provider and provider-specific options.
 type LLMConfig struct {
-	Provider string       `yaml:"provider"` // e.g. "mock"
-	Mock     MockSettings `yaml:"mock"`
+	Provider string          `yaml:"provider"` // e.g. "mock" or "aiproxy"
+	Mock     MockSettings    `yaml:"mock"`
+	AIProxy  AIProxySettings `yaml:"aiproxy"`
 }
 
 // MockSettings config for the mock LLM.
 type MockSettings struct {
 	Delay  time.Duration `yaml:"delay"`
 	Prefix string        `yaml:"prefix"`
+}
+
+// AIProxySettings config for the AI Proxy (OpenAI-compatible) LLM.
+type AIProxySettings struct {
+	BaseURL      string  `yaml:"baseUrl"`      // e.g. http://localhost:8900
+	APIKey       string  `yaml:"apiKey"`       // optional
+	Model        string  `yaml:"model"`        // e.g. gpt-5
+	SystemPrompt string  `yaml:"systemPrompt"` // optional system message override
+	Instructions string  `yaml:"instructions"` // optional user instruction override
+	Temperature  float32 `yaml:"temperature"`  // optional
+	MaxTokens    int     `yaml:"maxTokens"`    // optional
 }
 
 // TargetEntry describes the single configured target (e.g., Git).
@@ -238,6 +250,15 @@ func applyDefaults(cfg *Config) {
 	}
 	if cfg.LLM.Mock.Prefix == "" {
 		cfg.LLM.Mock.Prefix = "Transcribed by Mock"
+	}
+	// AI Proxy sensible defaults (used if provider == "aiproxy")
+	if strings.EqualFold(cfg.LLM.Provider, "aiproxy") {
+		if strings.TrimSpace(cfg.LLM.AIProxy.BaseURL) == "" {
+			cfg.LLM.AIProxy.BaseURL = "http://localhost:8900"
+		}
+		if strings.TrimSpace(cfg.LLM.AIProxy.Model) == "" {
+			cfg.LLM.AIProxy.Model = "gpt-5"
+		}
 	}
 }
 

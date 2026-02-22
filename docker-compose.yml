@@ -14,4 +14,3 @@ services:
       - ./dev/app-config.yaml:/app/config/config.yaml:ro
       # Local data dir for SQLite DB and git clone cache
       - ./dev/data:/app/data
-    restart: unless-stopped

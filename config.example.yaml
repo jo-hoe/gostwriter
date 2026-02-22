@@ -19,7 +19,15 @@ server:
   callbackBackoff: 2s
 
 llm:
-  provider: "mock"
+  provider: "aiproxy"
+  aiproxy:
+    baseUrl: "http://localhost:8900"
+    apiKey: "${AIPROXY_API_KEY}"
+    model: "gpt-5"
+    systemPrompt: ""
+    instructions: ""
+    temperature: 0
+    maxTokens: 0
   mock:
     delay: 2s
     prefix: "Transcribed by Mock"

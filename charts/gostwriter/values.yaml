@@ -119,6 +119,14 @@ server:
 
 llm:
   provider: "mock"
+  aiproxy:
+    baseUrl: "http://localhost:8900"
+    apiKey: ""
+    model: "gpt-5"
+    systemPrompt: ""
+    instructions: ""
+    temperature: 0
+    maxTokens: 0
   mock:
     delay: 2s
     prefix: "Transcribed by Mock"
@@ -141,3 +149,39 @@ target:
     type: "basic"
     username: "git"
     token: ""
+
+# -- Optional Kubernetes CronJob for scheduled tasks
+# This chart does not define any default job logic. Configure command/args as needed.
+cronjob:
+  # -- Enable rendering a CronJob resource
+  enabled: false
+  # -- Cron schedule (standard CRON format)
+  schedule: "0 2 * * *"
+  # -- Optional Kubernetes CronJob timezone (K8s v1.27+), e.g. "Europe/Berlin"
+  # When set, renders .spec.timeZone in the CronJob.
+  timeZone: ""
+  # -- Concurrency policy: Allow | Forbid | Replace
+  concurrencyPolicy: "Forbid"
+  # -- Starting deadline seconds for missed schedules (omit or set to null to disable)
+  startingDeadlineSeconds:
+  # -- How many completed jobs to keep
+  successfulJobsHistoryLimit: 1
+  # -- How many failed jobs to keep
+  failedJobsHistoryLimit: 1
+  # -- Job backoff limit
+  backoffLimit: 1
+  # -- Additional labels/annotations for the CronJob
+  labels: {}
+  annotations: {}
+  # -- Image overrides for CronJob (fallback to top-level image when empty)
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: ""
+  # -- Container command/args for the CronJob container (required for actual work)
+  command: []
+  args: []
+  # -- Optional environment variables for the CronJob container
+  env: []
+  # -- Optional resource requests/limits
+  resources: {}

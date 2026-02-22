@@ -37,9 +37,6 @@ COPY --from=builder /out/gostwriter /app/gostwriter
 # Default config path is read from env var if set (GOSTWRITER_CONFIG)
 ENV GOSTWRITER_CONFIG=/app/config/config.yaml
 
-# Expose default HTTP port
-EXPOSE 8080
-
 # Use tini as an init to handle signals/children properly
 ENTRYPOINT ["/sbin/tini", "--"]
 
