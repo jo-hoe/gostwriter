@@ -44,7 +44,7 @@ Helm chart for deploying Gostwriter
 | replicaCount | int | `1` | Number of desired pod replicas |
 | resources | object | `{}` | Resource requests and limits for the container |
 | securityContext | object | `{}` | Container-level security context |
-| server | object | `{"address":":8080","apiKey":"","callbackBackoff":"2s","callbackRetries":3,"databasePath":"","idleTimeout":"60s","maxUploadSize":"10Mi","readTimeout":"15s","shutdownGrace":"15s","storageDir":"/app/data","workerCount":4,"writeTimeout":"30s"}` | Structured configuration rendered into config.yaml (used only when configRaw is empty) |
+| server | object | `{"address":":8080","apiKey":"","callbackBackoff":"2s","callbackRetries":3,"databasePath":"","idleTimeout":"60s","maxUploadSize":"10Mi","readTimeout":"15s","shutdownGrace":"15s","storageDir":"/app/data","workerCount":4,"writeTimeout":"2m"}` | Structured configuration rendered into config.yaml (used only when configRaw is empty) |
 | service.port | int | `80` | Service port |
 | service.targetPort | int | `8080` | Target container port exposed by the application |
 | service.type | string | `"ClusterIP"` | Kubernetes Service type |
