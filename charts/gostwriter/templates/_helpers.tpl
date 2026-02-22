@@ -47,9 +47,10 @@ default
 {{- define "gostwriter.secretEnvName" -}}
 {{- if .Values.existingSecret -}}
 {{- .Values.existingSecret -}}
-{{- else if .Values.secretEnv.create -}}
-{{- if .Values.secretEnv.name -}}
-{{- .Values.secretEnv.name -}}
+{{- else -}}
+{{- $secretEnv := .Values.secretEnv | default dict -}}
+{{- if $secretEnv.name -}}
+{{- $secretEnv.name -}}
 {{- else -}}
 {{- printf "%s-env" (include "gostwriter.fullname" .) -}}
 {{- end -}}

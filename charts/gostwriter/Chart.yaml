@@ -2,8 +2,8 @@ apiVersion: v2
 name: gostwriter
 description: Helm chart for deploying Gostwriter
 type: application
-version: 0.1.0
-appVersion: "latest"
+version: 0.0.1
+appVersion: "0.0.1"
 keywords:
   - gostwriter
   - transcription

@@ -16,10 +16,15 @@ spec:
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.podAnnotations }}
       annotations:
+        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
+        {{- if and (not .Values.existingConfigSecret) (not .Values.configAsSecret) }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | quote }}
+        {{- else if and (not .Values.existingConfigSecret) .Values.configAsSecret }}
+        checksum/config: {{ include (print $.Template.BasePath "/secret-config.yaml") . | sha256sum | quote }}
+        {{- end }}
     spec:
       serviceAccountName: {{ include "gostwriter.serviceAccountName" . }}
       {{- with .Values.imagePullSecrets }}
