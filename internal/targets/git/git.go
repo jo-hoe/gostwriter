@@ -130,11 +130,8 @@ func (t *Target) stageFile(ctx context.Context, repoDir, relPath string) error {
 }
 
 func (t *Target) gitCommit(ctx context.Context, repoDir, message string) error {
-	return runGit(ctx, repoDir,
-		"-c", "user.name="+t.cfg.AuthorName,
-		"-c", "user.email="+t.cfg.AuthorEmail,
-		"commit", "-m", message,
-	)
+	args := append(t.userConfigArgs(), "commit", "-m", message)
+	return runGit(ctx, repoDir, args...)
 }
 
 func (t *Target) headHash(ctx context.Context, repoDir string) (string, error) {
@@ -189,11 +186,13 @@ func (t *Target) syncRepo(ctx context.Context, repoDir string) error {
 			if ok {
 				switch {
 				case behind > 0 && ahead == 0:
-					if err := runGit(ctx, repoDir, "merge", "--ff-only", t.remoteBranchQualified()); err != nil {
+					args := append(t.userConfigArgs(), "merge", "--ff-only", t.remoteBranchQualified())
+					if err := runGit(ctx, repoDir, args...); err != nil {
 						return fmt.Errorf("git merge --ff-only %s: %w", t.remoteBranchQualified(), err)
 					}
 				case behind > 0 && ahead > 0:
-					if err := runGit(ctx, repoDir, "rebase", t.remoteBranchQualified()); err != nil {
+					rbArgs := append(t.userConfigArgs(), "rebase", t.remoteBranchQualified())
+					if err := runGit(ctx, repoDir, rbArgs...); err != nil {
 						_ = runGit(ctx, repoDir, "rebase", "--abort")
 						return fmt.Errorf("git rebase %s: %w", t.remoteBranchQualified(), err)
 					}
@@ -201,7 +200,8 @@ func (t *Target) syncRepo(ctx context.Context, repoDir string) error {
 					// up to date or only ahead, nothing to do
 				}
 			} else {
-				_ = runGit(ctx, repoDir, "merge", "--ff-only", t.remoteBranchQualified())
+				args := append(t.userConfigArgs(), "merge", "--ff-only", t.remoteBranchQualified())
+				_ = runGit(ctx, repoDir, args...)
 			}
 		}
 		return nil
@@ -221,9 +221,11 @@ func (t *Target) pushRepo(ctx context.Context, repoDir string) error {
 		// Recovery path: fetch + rebase (or merge) then push again
 		recovery := func() error {
 			_ = runGit(ctx, repoDir, "fetch", common.GitRemoteName, "--prune")
-			if rbErr := runGit(ctx, repoDir, "rebase", t.remoteBranchQualified()); rbErr != nil {
+			rbArgs := append(t.userConfigArgs(), "rebase", t.remoteBranchQualified())
+			if rbErr := runGit(ctx, repoDir, rbArgs...); rbErr != nil {
 				_ = runGit(ctx, repoDir, "rebase", "--abort")
-				if mgErr := runGit(ctx, repoDir, "merge", "--no-edit", t.remoteBranchQualified()); mgErr != nil {
+				mgArgs := append(t.userConfigArgs(), "merge", "--no-edit", t.remoteBranchQualified())
+				if mgErr := runGit(ctx, repoDir, mgArgs...); mgErr != nil {
 					return fmt.Errorf("push recovery failed (rebase and merge): rebase=%v, merge=%v", rbErr, mgErr)
 				}
 			}
@@ -333,6 +335,13 @@ func (t *Target) remoteRefName() string {
 
 func (t *Target) remoteBranchQualified() string {
 	return fmt.Sprintf("%s/%s", common.GitRemoteName, t.cfg.Branch)
+}
+
+func (t *Target) userConfigArgs() []string {
+	return []string{
+		"-c", "user.name=" + t.cfg.AuthorName,
+		"-c", "user.email=" + t.cfg.AuthorEmail,
+	}
 }
 
 func (t *Target) withAuthRemote(ctx context.Context, repoDir string, fn func() error) error {
