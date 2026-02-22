@@ -52,68 +52,38 @@ func (t *Target) Name() string { return t.name }
 
 func (t *Target) Post(ctx context.Context, req targets.TargetRequest) (targets.TargetResult, error) {
 	repoDir := t.repoCacheDir()
-	if _, statErr := os.Stat(repoDir); os.IsNotExist(statErr) {
-		if err := t.cloneRepo(ctx, repoDir); err != nil {
-			return targets.TargetResult{}, err
-		}
-		// After initial clone, ensure the desired branch is prepared (checkout/create and sync)
-		if err := t.syncRepo(ctx, repoDir); err != nil {
-			return targets.TargetResult{}, err
-		}
-	} else {
-		// Do not fetch/pull here to avoid unnecessary syncs.
-		// Just ensure the target branch is checked out; handle remote divergence on push if needed.
-		if err := t.ensureBranch(ctx, repoDir); err != nil {
-			return targets.TargetResult{}, err
-		}
+
+	if err := t.ensureRepo(ctx, repoDir); err != nil {
+		return targets.TargetResult{}, err
 	}
 
-	// Prepare path and content
 	filename, err := t.renderFilename(req)
 	if err != nil {
 		return targets.TargetResult{}, err
 	}
-	fullPath := filepath.Join(repoDir, filename)
-	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
-		return targets.TargetResult{}, fmt.Errorf("ensure dir: %w", err)
-	}
-	if err := os.WriteFile(fullPath, []byte(req.Markdown), 0o644); err != nil {
-		return targets.TargetResult{}, fmt.Errorf("write file: %w", err)
-	}
 
-	relPath, err := filepath.Rel(repoDir, fullPath)
+	_, relPath, err := t.writeContent(repoDir, filename, req.Markdown)
 	if err != nil {
-		relPath = filename
+		return targets.TargetResult{}, err
 	}
 
-	// git add
-	if err := runGit(ctx, repoDir, "add", "--", relPath); err != nil {
-		return targets.TargetResult{}, fmt.Errorf("git add: %w", err)
+	if err := t.stageFile(ctx, repoDir, relPath); err != nil {
+		return targets.TargetResult{}, err
 	}
 
-	// commit
 	commitMsg, err := t.renderCommitMessage(req)
 	if err != nil {
 		return targets.TargetResult{}, err
 	}
-	commitErr := runGit(ctx, repoDir, "-c", "user.name="+t.cfg.AuthorName, "-c", "user.email="+t.cfg.AuthorEmail, "commit", "-m", commitMsg)
-	if commitErr != nil {
-		// If nothing to commit, bail out gracefully (but then we cannot push new content)
-		if isNothingToCommit(commitErr) {
-			// Still return success with current HEAD hash
-		} else {
-			return targets.TargetResult{}, fmt.Errorf("git commit: %w", commitErr)
-		}
+	if err := t.gitCommit(ctx, repoDir, commitMsg); err != nil && !isNothingToCommit(err) {
+		return targets.TargetResult{}, fmt.Errorf("git commit: %w", err)
 	}
 
-	// Read HEAD hash
-	hashOut := &bytes.Buffer{}
-	if err := runGitWithOutput(ctx, repoDir, hashOut, nil, "rev-parse", "HEAD"); err != nil {
-		return targets.TargetResult{}, fmt.Errorf("git rev-parse: %w", err)
+	commitHash, err := t.headHash(ctx, repoDir)
+	if err != nil {
+		return targets.TargetResult{}, err
 	}
-	commitHash := strings.TrimSpace(hashOut.String())
 
-	// push
 	if err := t.pushRepo(ctx, repoDir); err != nil {
 		return targets.TargetResult{}, err
 	}
@@ -126,24 +96,69 @@ func (t *Target) Post(ctx context.Context, req targets.TargetRequest) (targets.T
 	}, nil
 }
 
+// ensureRepo ensures a local clone exists and the target branch is prepared.
+func (t *Target) ensureRepo(ctx context.Context, repoDir string) error {
+	if _, statErr := os.Stat(repoDir); os.IsNotExist(statErr) {
+		if err := t.cloneRepo(ctx, repoDir); err != nil {
+			return err
+		}
+		return t.syncRepo(ctx, repoDir)
+	}
+	return t.ensureBranch(ctx, repoDir)
+}
+
+func (t *Target) writeContent(repoDir, filename, markdown string) (fullPath, relPath string, err error) {
+	fullPath = filepath.Join(repoDir, filename)
+	if err = os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		return "", "", fmt.Errorf("ensure dir: %w", err)
+	}
+	if err = os.WriteFile(fullPath, []byte(markdown), 0o644); err != nil {
+		return "", "", fmt.Errorf("write file: %w", err)
+	}
+	relPath, relErr := filepath.Rel(repoDir, fullPath)
+	if relErr != nil {
+		relPath = filename
+	}
+	return fullPath, relPath, nil
+}
+
+func (t *Target) stageFile(ctx context.Context, repoDir, relPath string) error {
+	if err := runGit(ctx, repoDir, "add", "--", relPath); err != nil {
+		return fmt.Errorf("git add: %w", err)
+	}
+	return nil
+}
+
+func (t *Target) gitCommit(ctx context.Context, repoDir, message string) error {
+	return runGit(ctx, repoDir,
+		"-c", "user.name="+t.cfg.AuthorName,
+		"-c", "user.email="+t.cfg.AuthorEmail,
+		"commit", "-m", message,
+	)
+}
+
+func (t *Target) headHash(ctx context.Context, repoDir string) (string, error) {
+	hashOut := &bytes.Buffer{}
+	if err := runGitWithOutput(ctx, repoDir, hashOut, nil, "rev-parse", "HEAD"); err != nil {
+		return "", fmt.Errorf("git rev-parse: %w", err)
+	}
+	return strings.TrimSpace(hashOut.String()), nil
+}
+
 func (t *Target) cloneRepo(ctx context.Context, repoDir string) error {
-	authURL, err := withAuth(t.cfg.RepoURL, t.cfg.Auth.Username, t.cfg.Auth.Token)
+	authURL, err := t.authURL()
 	if err != nil {
 		return fmt.Errorf("auth url: %w", err)
 	}
 	// Try cloning the configured branch; if it doesn't exist on the remote, fall back to cloning the default branch.
 	if err := runGit(ctx, "", "clone", "--branch", t.cfg.Branch, "--single-branch", "--depth", "1", authURL, repoDir); err != nil {
-		// Cleanup potentially created directory from the failed clone before retrying
 		_ = os.RemoveAll(repoDir)
-		// Fallback: clone default branch without specifying --branch
 		if err2 := runGit(ctx, "", "clone", "--depth", "1", authURL, repoDir); err2 != nil {
-			// Return the original error which indicates the configured branch was not found.
 			return fmt.Errorf("git clone: %w", err)
 		}
 	}
 	// Set remote back to tokenless URL to avoid storing secret in .git/config
 	if err := runGit(ctx, repoDir, "remote", "set-url", common.GitRemoteName, t.cfg.RepoURL); err != nil {
-		// Not fatal, but warn
 		return fmt.Errorf("git remote set-url: %w", err)
 	}
 	return nil
@@ -151,9 +166,7 @@ func (t *Target) cloneRepo(ctx context.Context, repoDir string) error {
 
 func (t *Target) ensureBranch(ctx context.Context, repoDir string) error {
 	branch := t.cfg.Branch
-	// Ensure the desired branch is checked out without fetching.
 	if err := runGit(ctx, repoDir, "checkout", branch); err != nil {
-		// If branch doesn't exist locally, create it from current HEAD.
 		if err2 := runGit(ctx, repoDir, "checkout", "-b", branch); err2 != nil {
 			return fmt.Errorf("git checkout %s: %w", branch, err)
 		}
@@ -162,103 +175,93 @@ func (t *Target) ensureBranch(ctx context.Context, repoDir string) error {
 }
 
 func (t *Target) syncRepo(ctx context.Context, repoDir string) error {
-	branch := t.cfg.Branch
-	// Ensure branch is checked out
-	if err := runGit(ctx, repoDir, "checkout", branch); err != nil {
-		// Try to create tracking branch from origin
-		_ = runGit(ctx, repoDir, "fetch", common.GitRemoteName)
-		if err2 := runGit(ctx, repoDir, "checkout", "-b", branch, "--track", fmt.Sprintf("%s/%s", common.GitRemoteName, branch)); err2 != nil {
-			// Fallback: create a new local branch from current HEAD without tracking if remote branch doesn't exist
-			if err3 := runGit(ctx, repoDir, "checkout", "-b", branch); err3 != nil {
-				return fmt.Errorf("git checkout %s: %w", branch, err)
-			}
-		}
+	if err := t.checkoutOrCreateBranch(ctx, repoDir); err != nil {
+		return err
 	}
 
 	// Temporarily set remote origin to authenticated URL to fetch
-	authURL, err := withAuth(t.cfg.RepoURL, t.cfg.Auth.Username, t.cfg.Auth.Token)
+	return t.withAuthRemote(ctx, repoDir, func() error {
+		_ = runGit(ctx, repoDir, "fetch", common.GitRemoteName, "--prune")
+
+		// If the remote branch exists, attempt to integrate it safely.
+		if runGit(ctx, repoDir, "rev-parse", "--verify", "--quiet", t.remoteRefName()) == nil {
+			behind, ahead, ok := t.aheadBehind(ctx, repoDir)
+			if ok {
+				switch {
+				case behind > 0 && ahead == 0:
+					if err := runGit(ctx, repoDir, "merge", "--ff-only", t.remoteBranchQualified()); err != nil {
+						return fmt.Errorf("git merge --ff-only %s: %w", t.remoteBranchQualified(), err)
+					}
+				case behind > 0 && ahead > 0:
+					if err := runGit(ctx, repoDir, "rebase", t.remoteBranchQualified()); err != nil {
+						_ = runGit(ctx, repoDir, "rebase", "--abort")
+						return fmt.Errorf("git rebase %s: %w", t.remoteBranchQualified(), err)
+					}
+				default:
+					// up to date or only ahead, nothing to do
+				}
+			} else {
+				_ = runGit(ctx, repoDir, "merge", "--ff-only", t.remoteBranchQualified())
+			}
+		}
+		return nil
+	})
+}
+
+func (t *Target) pushRepo(ctx context.Context, repoDir string) error {
+	authURL, err := t.authURL()
 	if err != nil {
 		return fmt.Errorf("auth url: %w", err)
 	}
-	if err := runGit(ctx, repoDir, "remote", "set-url", common.GitRemoteName, authURL); err != nil {
-		return fmt.Errorf("set auth remote: %w", err)
-	}
-	defer func() {
-		_ = runGit(context.Background(), repoDir, "remote", "set-url", common.GitRemoteName, t.cfg.RepoURL)
-	}()
 
-	// Fetch latest remote state without discarding potential local commits
-	_ = runGit(ctx, repoDir, "fetch", common.GitRemoteName, "--prune")
-
-	// If the remote branch exists, attempt to integrate it safely.
-	remoteRef := fmt.Sprintf("refs/remotes/%s/%s", common.GitRemoteName, branch)
-	if runGit(ctx, repoDir, "rev-parse", "--verify", "--quiet", remoteRef) == nil {
-		// Determine ahead/behind counts: "<behind> <ahead>"
-		abOut := &bytes.Buffer{}
-		if err := runGitWithOutput(ctx, repoDir, abOut, nil, "rev-list", "--left-right", "--count", fmt.Sprintf("%s...%s", fmt.Sprintf("%s/%s", common.GitRemoteName, branch), "HEAD")); err == nil {
-			fields := strings.Fields(strings.TrimSpace(abOut.String()))
-			if len(fields) >= 2 {
-				behind, _ := strconv.Atoi(fields[0])
-				ahead, _ := strconv.Atoi(fields[1])
-				switch {
-				case behind > 0 && ahead == 0:
-					// Fast-forward only: local is behind, no local commits to lose
-					if err := runGit(ctx, repoDir, "merge", "--ff-only", fmt.Sprintf("%s/%s", common.GitRemoteName, branch)); err != nil {
-						return fmt.Errorf("git merge --ff-only origin/%s: %w", branch, err)
-					}
-				case behind > 0 && ahead > 0:
-					// Diverged: rebase local commits on top of remote
-					if err := runGit(ctx, repoDir, "rebase", fmt.Sprintf("%s/%s", common.GitRemoteName, branch)); err != nil {
-						// If rebase fails, try to abort any in-progress rebase and report
-						_ = runGit(ctx, repoDir, "rebase", "--abort")
-						return fmt.Errorf("git rebase origin/%s: %w", branch, err)
-					}
-				default:
-					// Up-to-date or only ahead (local commits present): do nothing
+	// First attempt: push directly without pulling
+	if err := runGit(ctx, repoDir, "push", authURL, t.cfg.Branch); err == nil {
+		return nil
+	} else if isNonFastForwardPush(err) {
+		// Recovery path: fetch + rebase (or merge) then push again
+		recovery := func() error {
+			_ = runGit(ctx, repoDir, "fetch", common.GitRemoteName, "--prune")
+			if rbErr := runGit(ctx, repoDir, "rebase", t.remoteBranchQualified()); rbErr != nil {
+				_ = runGit(ctx, repoDir, "rebase", "--abort")
+				if mgErr := runGit(ctx, repoDir, "merge", "--no-edit", t.remoteBranchQualified()); mgErr != nil {
+					return fmt.Errorf("push recovery failed (rebase and merge): rebase=%v, merge=%v", rbErr, mgErr)
 				}
-			} else {
-				// Fallback: attempt fast-forward merge if possible
-				_ = runGit(ctx, repoDir, "merge", "--ff-only", fmt.Sprintf("%s/%s", common.GitRemoteName, branch))
+			}
+			if perr := runGit(ctx, repoDir, "push", authURL, t.cfg.Branch); perr != nil {
+				return fmt.Errorf("git push after recovery: %w", perr)
+			}
+			return nil
+		}
+		return t.withAuthRemote(ctx, repoDir, recovery)
+	} else {
+		return fmt.Errorf("git push: %w", err)
+	}
+}
+
+func (t *Target) checkoutOrCreateBranch(ctx context.Context, repoDir string) error {
+	branch := t.cfg.Branch
+	if err := runGit(ctx, repoDir, "checkout", branch); err != nil {
+		_ = runGit(ctx, repoDir, "fetch", common.GitRemoteName)
+		if err2 := runGit(ctx, repoDir, "checkout", "-b", branch, "--track", t.remoteBranchQualified()); err2 != nil {
+			if err3 := runGit(ctx, repoDir, "checkout", "-b", branch); err3 != nil {
+				return fmt.Errorf("git checkout %s: %w", branch, err)
 			}
 		}
 	}
 	return nil
 }
 
-func (t *Target) pushRepo(ctx context.Context, repoDir string) error {
-	authURL, err := withAuth(t.cfg.RepoURL, t.cfg.Auth.Username, t.cfg.Auth.Token)
-	if err != nil {
-		return fmt.Errorf("auth url: %w", err)
+func (t *Target) aheadBehind(ctx context.Context, repoDir string) (behind, ahead int, ok bool) {
+	abOut := &bytes.Buffer{}
+	if err := runGitWithOutput(ctx, repoDir, abOut, nil, "rev-list", "--left-right", "--count", fmt.Sprintf("%s...%s", t.remoteBranchQualified(), "HEAD")); err == nil {
+		fields := strings.Fields(strings.TrimSpace(abOut.String()))
+		if len(fields) >= 2 {
+			behind, _ = strconv.Atoi(fields[0])
+			ahead, _ = strconv.Atoi(fields[1])
+			return behind, ahead, true
+		}
 	}
-	// First attempt: push directly without pulling
-	if err := runGit(ctx, repoDir, "push", authURL, t.cfg.Branch); err == nil {
-		return nil
-	} else if isNonFastForwardPush(err) {
-		// Recovery path: fetch + rebase (or merge) then push again
-		// Temporarily set remote origin to authenticated URL for fetch/rebase
-		if setErr := runGit(ctx, repoDir, "remote", "set-url", common.GitRemoteName, authURL); setErr != nil {
-			return fmt.Errorf("set auth remote for recovery: %w", setErr)
-		}
-		defer func() {
-			_ = runGit(context.Background(), repoDir, "remote", "set-url", common.GitRemoteName, t.cfg.RepoURL)
-		}()
-
-		_ = runGit(ctx, repoDir, "fetch", common.GitRemoteName, "--prune")
-		// Try rebase first to keep history linear; fall back to merge if needed
-		if rbErr := runGit(ctx, repoDir, "rebase", fmt.Sprintf("%s/%s", common.GitRemoteName, t.cfg.Branch)); rbErr != nil {
-			_ = runGit(ctx, repoDir, "rebase", "--abort")
-			if mgErr := runGit(ctx, repoDir, "merge", "--no-edit", fmt.Sprintf("%s/%s", common.GitRemoteName, t.cfg.Branch)); mgErr != nil {
-				return fmt.Errorf("push recovery failed (rebase and merge): rebase=%v, merge=%v", rbErr, mgErr)
-			}
-		}
-		// Retry push
-		if perr := runGit(ctx, repoDir, "push", authURL, t.cfg.Branch); perr != nil {
-			return fmt.Errorf("git push after recovery: %w", perr)
-		}
-		return nil
-	} else {
-		return fmt.Errorf("git push: %w", err)
-	}
+	return 0, 0, false
 }
 
 func (t *Target) renderFilename(req targets.TargetRequest) (string, error) {
@@ -320,6 +323,32 @@ func (t *Target) repoCacheDir() string {
 	return filepath.Join(t.cacheRoot, fmt.Sprintf("%s_%s", safeURL, safeBranch))
 }
 
+func (t *Target) authURL() (string, error) {
+	return withAuth(t.cfg.RepoURL, t.cfg.Auth.Username, t.cfg.Auth.Token)
+}
+
+func (t *Target) remoteRefName() string {
+	return fmt.Sprintf("refs/remotes/%s/%s", common.GitRemoteName, t.cfg.Branch)
+}
+
+func (t *Target) remoteBranchQualified() string {
+	return fmt.Sprintf("%s/%s", common.GitRemoteName, t.cfg.Branch)
+}
+
+func (t *Target) withAuthRemote(ctx context.Context, repoDir string, fn func() error) error {
+	authURL, err := t.authURL()
+	if err != nil {
+		return fmt.Errorf("auth url: %w", err)
+	}
+	if err := runGit(ctx, repoDir, "remote", "set-url", common.GitRemoteName, authURL); err != nil {
+		return fmt.Errorf("set auth remote: %w", err)
+	}
+	defer func() {
+		_ = runGit(context.Background(), repoDir, "remote", "set-url", common.GitRemoteName, t.cfg.RepoURL)
+	}()
+	return fn()
+}
+
 func sanitizePath(s string) string {
 	s = strings.ReplaceAll(s, "://", "_")
 	s = strings.ReplaceAll(s, "/", "_")
@@ -333,7 +362,6 @@ func withAuth(rawURL, username, token string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Avoid placing '@' or ':' in username/token improperly
 	u.User = url.UserPassword(username, token)
 	return u.String(), nil
 }
@@ -376,7 +404,6 @@ func isNothingToCommit(err error) bool {
 		return false
 	}
 	msg := err.Error()
-	// Match common git output when nothing to commit
 	return strings.Contains(strings.ToLower(msg), "nothing to commit")
 }
 

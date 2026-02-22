@@ -190,7 +190,6 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 		svc.Log.Info("job processed (sync)", "job_id", jobID)
 	}
 	w.WriteHeader(http.StatusOK)
-	return
 }
 
 var idPattern = regexp.MustCompile(fmt.Sprintf("^%s/([a-f0-9-]+)$", common.PathTranscriptions))
