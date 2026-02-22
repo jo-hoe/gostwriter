@@ -7,6 +7,11 @@ services:
       dockerfile: Dockerfile
     image: gostwriter:latest
     container_name: gostwriter
+    # Use the default bridge network so the container can access the local LAN (e.g., 192.168.x.x / 10.x.x.x)
+    network_mode: bridge
+    # Provide a reliable alias to reach the host from inside the container; works on Docker 20.10+ (Desktop/Linux)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8080:8080"
     volumes:
