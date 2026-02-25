@@ -18,8 +18,8 @@ func TestRenderFilenameAndCommitMessage(t *testing.T) {
 		BasePath:              "inbox/",
 		FilenameTemplate:      "{{ .JobID }}.md",
 		CommitMessageTemplate: "Add {{ .JobID }}",
-		RepoOwner:             "org",
-		RepoName:              "repo",
+		RepositoryOwner:       "org",
+		RepositoryName:        "repo",
 		Branch:                "main",
 		Auth:                  appcfg.GitHubAuthConfig{Token: "x"},
 	}
@@ -87,8 +87,8 @@ func TestNameAndPost(t *testing.T) {
 	defer srv.Close()
 
 	cfg := appcfg.GitHubTargetConfig{
-		RepoOwner:             "org",
-		RepoName:              "repo",
+		RepositoryOwner:       "org",
+		RepositoryName:        "repo",
 		Branch:                "main",
 		BasePath:              "inbox/",
 		FilenameTemplate:      "{{ .JobID }}.md",

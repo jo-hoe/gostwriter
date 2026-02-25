@@ -42,18 +42,18 @@ data:
         temperature: {{ .Values.llm.aiproxy.temperature }}
         maxTokens: {{ .Values.llm.aiproxy.maxTokens }}
     target:
-      type: {{ .Values.target.type | quote }}
-      name: {{ .Values.target.name | quote }}
-      repoOwner: {{ .Values.target.repoOwner | quote }}
-      repoName: {{ .Values.target.repoName | quote }}
-      branch: {{ .Values.target.branch | quote }}
-      basePath: {{ .Values.target.basePath | quote }}
-      filenameTemplate: {{ .Values.target.filenameTemplate | squote }}
-      commitMessageTemplate: {{ .Values.target.commitMessageTemplate | quote }}
-      authorName: {{ .Values.target.authorName | quote }}
-      authorEmail: {{ .Values.target.authorEmail | quote }}
-      apiBaseUrl: {{ .Values.target.apiBaseUrl | quote }}
-      auth:
-        token: {{ .Values.target.auth.token | quote }}
+      github:
+        enabled: {{ .Values.target.github.enabled }}
+        repositoryOwner: {{ .Values.target.github.repositoryOwner | quote }}
+        repositoryName: {{ .Values.target.github.repositoryName | quote }}
+        branch: {{ .Values.target.github.branch | quote }}
+        basePath: {{ .Values.target.github.basePath | quote }}
+        filenameTemplate: {{ .Values.target.github.filenameTemplate | squote }}
+        commitMessageTemplate: {{ .Values.target.github.commitMessageTemplate | quote }}
+        authorName: {{ .Values.target.github.authorName | quote }}
+        authorEmail: {{ .Values.target.github.authorEmail | quote }}
+        apiBaseUrl: {{ .Values.target.github.apiBaseUrl | quote }}
+        auth:
+          token: {{ .Values.target.github.auth.token | quote }}
     {{- end }}
 {{- end }}

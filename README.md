@@ -26,8 +26,8 @@ If the client sends `Prefer: respond-async`, the request is processed asynchrono
   - `dev/app-config.yaml` (used by docker-compose), or
   - `config.yaml` in the project root (used for local runs)
 - Minimum edits:
-  - Set `target.repoOwner`, `target.repoName`, `target.branch`
-  - Provide `target.auth.token` (either paste the PAT or use `${GITHUB_TOKEN}`)
+  - Set `target.github.repositoryOwner`, `target.github.repositoryName`, `target.github.branch`
+  - Provide `target.github.auth.token` (either paste the PAT or use `${GITHUB_TOKEN}`)
   - Choose LLM:
     - Mock (default): `llm.provider: "mock"` works without external services
     - AI Proxy: set `llm.provider: "aiproxy"`, `llm.aiproxy.baseUrl`, and `llm.aiproxy.apiKey` (or `${AIPROXY_API_KEY}`)
@@ -38,19 +38,19 @@ If the client sends `Prefer: respond-async`, the request is processed asynchrono
     provider: "mock"
 
   target:
-    type: "github"
-    name: "docs-main"
-    repoOwner: "yourorg"
-    repoName: "yourrepo"
-    branch: "main"
-    basePath: "inbox/"
-    filenameTemplate: "{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md"
-    commitMessageTemplate: "Add transcription {{ .JobID }}"
-    authorName: "Gostwriter Bot"
-    authorEmail: "bot@example.com"
-    apiBaseUrl: "https://api.github.com"
-    auth:
-      token: "${GITHUB_TOKEN}"
+    github:
+      enabled: true
+      repositoryOwner: "yourorg"
+      repositoryName: "yourrepo"
+      branch: "main"
+      basePath: "inbox/"
+      filenameTemplate: "{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md"
+      commitMessageTemplate: "Add transcription {{ .JobID }}"
+      authorName: "Gostwriter Bot"
+      authorEmail: "bot@example.com"
+      apiBaseUrl: "https://api.github.com"
+      auth:
+        token: "${GITHUB_TOKEN}"
   ```
 
 ### Run

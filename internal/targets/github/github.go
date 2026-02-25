@@ -30,8 +30,8 @@ func New(name string, cfg appcfg.GitHubTargetConfig) (*Target, error) {
 	if strings.TrimSpace(cfg.Auth.Token) == "" {
 		return nil, fmt.Errorf("github token must not be empty")
 	}
-	if strings.TrimSpace(cfg.RepoOwner) == "" || strings.TrimSpace(cfg.RepoName) == "" {
-		return nil, fmt.Errorf("repo owner/name must not be empty")
+	if strings.TrimSpace(cfg.RepositoryOwner) == "" || strings.TrimSpace(cfg.RepositoryName) == "" {
+		return nil, fmt.Errorf("repository owner/name must not be empty")
 	}
 	if strings.TrimSpace(cfg.Branch) == "" {
 		return nil, fmt.Errorf("branch must not be empty")
@@ -91,7 +91,7 @@ func (t *Target) Post(ctx context.Context, req targets.TargetRequest) (targets.T
 	}
 
 	// Construct URL: {apiBase}/repos/{owner}/{repo}/contents/{path}
-	url := fmt.Sprintf("%s/repos/%s/%s/contents/%s", strings.TrimRight(t.cfg.APIBaseURL, "/"), t.cfg.RepoOwner, t.cfg.RepoName, path)
+	url := fmt.Sprintf("%s/repos/%s/%s/contents/%s", strings.TrimRight(t.cfg.APIBaseURL, "/"), t.cfg.RepositoryOwner, t.cfg.RepositoryName, path)
 
 	// Prepare request
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(body))
@@ -132,7 +132,7 @@ func (t *Target) Post(ctx context.Context, req targets.TargetRequest) (targets.T
 		commitSHA = out.Commit.SHA
 	}
 
-	loc := fmt.Sprintf("github:%s/%s@%s:%s", t.cfg.RepoOwner, t.cfg.RepoName, t.cfg.Branch, path)
+	loc := fmt.Sprintf("github:%s/%s@%s:%s", t.cfg.RepositoryOwner, t.cfg.RepositoryName, t.cfg.Branch, path)
 	return targets.TargetResult{
 		TargetName: t.name,
 		Location:   loc,

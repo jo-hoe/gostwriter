@@ -64,16 +64,15 @@ func main() {
 
 	// Target (single)
 	reg := targets.NewRegistry()
-	switch cfg.Target.Type {
-	case "github":
-		t, err := githubTarget.New(cfg.Target.Name, cfg.Target.GitHub)
+	if cfg.Target.GitHub.Enabled {
+		t, err := githubTarget.New("github", cfg.Target.GitHub)
 		if err != nil {
-			logger.Error("init github target", "name", cfg.Target.Name, "err", err)
+			logger.Error("init github target", "err", err)
 			os.Exit(1)
 		}
 		reg.Add(t)
-	default:
-		logger.Error("unsupported target type", "type", cfg.Target.Type, "name", cfg.Target.Name)
+	} else {
+		logger.Error("no enabled target configured")
 		os.Exit(1)
 	}
 

@@ -17,7 +17,7 @@ import (
 type Config struct {
 	Server ServerConfig `yaml:"server"`
 	LLM    LLMConfig    `yaml:"llm"`
-	Target TargetEntry  `yaml:"target"`
+	Target TargetsConfig `yaml:"target"`
 }
 
 // ServerConfig holds HTTP server and runtime settings.
@@ -61,21 +61,16 @@ type AIProxySettings struct {
 	MaxTokens    int     `yaml:"maxTokens"`    // optional
 }
 
-// TargetEntry describes the single configured target (e.g., Git).
-type TargetEntry struct {
-	Type string `yaml:"type"`
-	Name string `yaml:"name"`
-
-	// GitHub-specific fields (used when Type == "github")
-	GitHub GitHubTargetConfig `yaml:"-"`
-	// Raw map to help custom unmarshalling
-	raw map[string]any
+// TargetsConfig groups all possible target backends.
+type TargetsConfig struct {
+	GitHub GitHubTargetConfig `yaml:"github"`
 }
 
 // GitHubTargetConfig config for posting to a GitHub repository via REST API.
 type GitHubTargetConfig struct {
-	RepoOwner             string           `yaml:"repoOwner"`
-	RepoName              string           `yaml:"repoName"`
+	Enabled               bool             `yaml:"enabled"`
+	RepositoryOwner       string           `yaml:"repositoryOwner"`
+	RepositoryName        string           `yaml:"repositoryName"`
 	Branch                string           `yaml:"branch"`
 	BasePath              string           `yaml:"basePath"`
 	FilenameTemplate      string           `yaml:"filenameTemplate"`
@@ -188,7 +183,7 @@ func Load(path string) (*Config, error) {
 
 	applyDefaults(&cfg)
 
-	if err := postProcessTarget(&cfg, expanded); err != nil {
+	if err := postProcessTargets(&cfg); err != nil {
 		return nil, err
 	}
 
@@ -267,76 +262,47 @@ func applyDefaults(cfg *Config) {
 	}
 }
 
-// postProcessTarget unmarshals per-target type configs and expands env in token fields if needed.
-func postProcessTarget(cfg *Config, expandedYAML string) error {
-	var rawNode struct {
-		Target map[string]any `yaml:"target"`
-	}
-	if err := yaml.Unmarshal([]byte(expandedYAML), &rawNode); err != nil {
-		return fmt.Errorf("parse raw target: %w", err)
-	}
-	entry := &cfg.Target
-	entry.raw = rawNode.Target
-	switch strings.ToLower(entry.Type) {
-	case "github":
-		var gh GitHubTargetConfig
-		if err := decodeMap(entry.raw, &gh); err != nil {
-			return fmt.Errorf("parse github target %q: %w", entry.Name, err)
+// postProcessTargets performs any normalization/defaulting needed for enabled targets.
+func postProcessTargets(cfg *Config) error {
+	// GitHub target
+	if cfg.Target.GitHub.Enabled {
+		cfg.Target.GitHub.BasePath = normalizePathPrefix(cfg.Target.GitHub.BasePath)
+		if strings.TrimSpace(cfg.Target.GitHub.APIBaseURL) == "" {
+			cfg.Target.GitHub.APIBaseURL = "https://api.github.com"
 		}
-		// Normalize base path to use forward slashes and ensure trailing slash if provided.
-		gh.BasePath = normalizePathPrefix(gh.BasePath)
-		// Default API base URL
-		if strings.TrimSpace(gh.APIBaseURL) == "" {
-			gh.APIBaseURL = "https://api.github.com"
-		}
-		entry.GitHub = gh
-	default:
-		return fmt.Errorf("unsupported target type %q for %q", entry.Type, entry.Name)
 	}
 	return nil
 }
 
 func validate(cfg *Config) error {
-	// Validate target presence
-	if strings.TrimSpace(cfg.Target.Type) == "" || strings.TrimSpace(cfg.Target.Name) == "" {
-		return errors.New("target.type and target.name are required")
+	// Ensure at least one target is enabled
+	if !cfg.Target.GitHub.Enabled {
+		return errors.New("no target enabled")
 	}
 
-	// Validate github target
-	switch strings.ToLower(cfg.Target.Type) {
-	case "github":
+	// Validate enabled targets
+	if cfg.Target.GitHub.Enabled {
 		g := cfg.Target.GitHub
-		if strings.TrimSpace(g.RepoOwner) == "" {
-			return fmt.Errorf("target %q: github.repoOwner is required", cfg.Target.Name)
+		if strings.TrimSpace(g.RepositoryOwner) == "" {
+			return fmt.Errorf("github.repositoryOwner is required")
 		}
-		if strings.TrimSpace(g.RepoName) == "" {
-			return fmt.Errorf("target %q: github.repoName is required", cfg.Target.Name)
+		if strings.TrimSpace(g.RepositoryName) == "" {
+			return fmt.Errorf("github.repositoryName is required")
 		}
 		if strings.TrimSpace(g.Branch) == "" {
-			return fmt.Errorf("target %q: github.branch is required", cfg.Target.Name)
+			return fmt.Errorf("github.branch is required")
 		}
 		if strings.TrimSpace(g.FilenameTemplate) == "" {
-			return fmt.Errorf("target %q: github.filenameTemplate is required", cfg.Target.Name)
+			return fmt.Errorf("github.filenameTemplate is required")
 		}
 		if strings.TrimSpace(g.CommitMessageTemplate) == "" {
-			return fmt.Errorf("target %q: github.commitMessageTemplate is required", cfg.Target.Name)
+			return fmt.Errorf("github.commitMessageTemplate is required")
 		}
 		if strings.TrimSpace(g.Auth.Token) == "" {
-			return fmt.Errorf("target %q: github.auth.token is required", cfg.Target.Name)
+			return fmt.Errorf("github.auth.token is required")
 		}
-	default:
-		// already rejected in postProcessTarget
 	}
 	return nil
-}
-
-// decodeMap marshals a generic map into a struct.
-func decodeMap(m map[string]any, out any) error {
-	b, err := yaml.Marshal(m)
-	if err != nil {
-		return err
-	}
-	return yaml.Unmarshal(b, out)
 }
 
 func normalizePathPrefix(p string) string {
