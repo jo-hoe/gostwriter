@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/jo-hoe/gostwriter/internal/common"
 	appcfg "github.com/jo-hoe/gostwriter/internal/config"
@@ -96,15 +97,30 @@ func (t *Target) Post(ctx context.Context, req targets.TargetRequest) (targets.T
 	}, nil
 }
 
-// ensureRepo ensures a local clone exists and the target branch is prepared.
+	// ensureRepo ensures a local clone exists and the target branch is prepared.
 func (t *Target) ensureRepo(ctx context.Context, repoDir string) error {
-	if _, statErr := os.Stat(repoDir); os.IsNotExist(statErr) {
-		if err := t.cloneRepo(ctx, repoDir); err != nil {
+	// If the directory is missing or not a valid git repository, start fresh.
+	if st, err := os.Stat(repoDir); err != nil || !st.IsDir() || !t.isValidRepo(ctx, repoDir) {
+		_ = os.RemoveAll(repoDir)
+		if err := t.cloneRepoWithRetry(ctx, repoDir); err != nil {
 			return err
 		}
 		return t.syncRepo(ctx, repoDir)
 	}
-	return t.ensureBranch(ctx, repoDir)
+
+	// Directory exists and appears to be a valid repo; ensure branch.
+	if err := t.ensureBranch(ctx, repoDir); err != nil {
+		// If it looks like the repo is broken, reclone and sync.
+		if isNotAGitRepoError(err) {
+			_ = os.RemoveAll(repoDir)
+			if err2 := t.cloneRepoWithRetry(ctx, repoDir); err2 != nil {
+				return err2
+			}
+			return t.syncRepo(ctx, repoDir)
+		}
+		return err
+	}
+	return nil
 }
 
 func (t *Target) writeContent(repoDir, filename, markdown string) (fullPath, relPath string, err error) {
@@ -151,7 +167,8 @@ func (t *Target) cloneRepo(ctx context.Context, repoDir string) error {
 	if err := runGit(ctx, "", "clone", "--branch", t.cfg.Branch, "--single-branch", "--depth", "1", authURL, repoDir); err != nil {
 		_ = os.RemoveAll(repoDir)
 		if err2 := runGit(ctx, "", "clone", "--depth", "1", authURL, repoDir); err2 != nil {
-			return fmt.Errorf("git clone: %w", err)
+			_ = os.RemoveAll(repoDir)
+			return fmt.Errorf("git clone failed: branch %q: %v; fallback default branch: %v", t.cfg.Branch, err, err2)
 		}
 	}
 	// Set remote back to tokenless URL to avoid storing secret in .git/config
@@ -384,6 +401,8 @@ func runGitWithOutput(ctx context.Context, dir string, stdout, stderr *bytes.Buf
 	if dir != "" {
 		cmd.Dir = dir
 	}
+	// Avoid any interactive prompts that could hang the process.
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	if stdout != nil {
 		cmd.Stdout = stdout
 	}
@@ -433,6 +452,49 @@ func isNonFastForwardPush(err error) bool {
 	default:
 		return false
 	}
+}
+
+func (t *Target) cloneRepoWithRetry(ctx context.Context, repoDir string) error {
+	const attempts = 3
+	var firstErr error
+	for i := 1; i <= attempts; i++ {
+		// Ensure we do not reuse a partially cloned directory.
+		_ = os.RemoveAll(repoDir)
+
+		// Add a per-attempt timeout to avoid hanging indefinitely on network hiccups.
+		attemptCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		err := t.cloneRepo(attemptCtx, repoDir)
+		cancel()
+		if err == nil {
+			return nil
+		}
+		if firstErr == nil {
+			firstErr = err
+		}
+		// Simple linear backoff between attempts.
+		time.Sleep(time.Duration(i) * time.Second)
+	}
+	return firstErr
+}
+
+// isValidRepo returns true if repoDir appears to be a healthy git repository.
+func (t *Target) isValidRepo(ctx context.Context, repoDir string) bool {
+	if _, err := os.Stat(filepath.Join(repoDir, ".git")); err != nil {
+		return false
+	}
+	out := &bytes.Buffer{}
+	if err := runGitWithOutput(ctx, repoDir, out, nil, "rev-parse", "--is-inside-work-tree"); err != nil {
+		return false
+	}
+	return strings.TrimSpace(out.String()) == "true"
+}
+
+func isNotAGitRepoError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not a git repository") || strings.Contains(msg, "git repository or work tree")
 }
 
 // Safety check to ensure git is available (optional invocation before use).
