@@ -68,7 +68,7 @@ func TestNameAndPost(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		received.Method = r.Method
 		received.URL = r.URL.Path
-		defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 		_ = json.NewDecoder(r.Body).Decode(&received.Body)
 
 		resp := map[string]any{

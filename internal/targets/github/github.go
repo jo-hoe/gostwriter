@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
-	"time"
 
 	appcfg "github.com/jo-hoe/gostwriter/internal/config"
 	"github.com/jo-hoe/gostwriter/internal/targets"
@@ -219,6 +218,3 @@ type createFileResponse struct {
 type apiError struct {
 	Message string `json:"message"`
 }
-
-// Ensure UTC timestamps in templates behave similarly to git target expectations.
-func nowUTC() time.Time { return time.Now().UTC() }
