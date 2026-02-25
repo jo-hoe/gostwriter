@@ -153,37 +153,34 @@ llm:
     # -- Prefix added by the mock provider
     prefix: "Transcribed by Mock"
 
-# -- Single target configuration (git)
+# -- Single target configuration (GitHub via REST API)
 # IMPORTANT: For Kubernetes, do NOT use env expansion inside the config.
 # Provide the token directly inside a Secret-backed config.yaml (via configRaw or existingConfigSecret).
 target:
-  # -- Target type: only "git" is supported
-  type: "git"
-  # -- Logical name used to address the target
-  name: "docs-main"
-  # -- HTTPS repository URL to push content to
-  repoUrl: "https://github.com/yourorg/yourrepo.git"
-  # -- Branch to use for commits
-  branch: "main"
-  # -- Base path in the repo where files are written
-  basePath: "inbox/"
-  # -- Go text/template for filename; has .Timestamp, .JobID, etc.
-  filenameTemplate: '{{ .Timestamp.Format "20060102-150405" }}-{{ .JobID }}.md'
-  # -- Go text/template for commit message
-  commitMessageTemplate: "Add transcription {{ .JobID }}"
-  # -- Commit author name used for git operations
-  authorName: "Gostwriter Bot"
-  # -- Commit author email used for git operations
-  authorEmail: "bot@example.com"
-  # -- Optional override for the clone cache location inside the container
-  cloneCacheDir: ""
-  auth:
-    # -- Authentication type; only "basic" is supported (username + token)
-    type: "basic"
-    # -- Username for HTTPS auth (often "git")
-    username: "git"
-    # -- Personal access token / password for HTTPS auth
-    token: ""
+  # -- GitHub target configuration (REST API)
+  github:
+    # -- Enable/disable the GitHub target
+    enabled: true
+    # -- GitHub repository owner and name
+    repositoryOwner: "yourorg"
+    repositoryName: "yourrepo"
+    # -- Branch to use for commits
+    branch: "main"
+    # -- Base path in the repository where files are written
+    basePath: "inbox/"
+    # -- Go text/template for filename; has .Timestamp, .JobID, etc.
+    filenameTemplate: '{{ .Timestamp.Format "20060102-150405" }}-{{ .JobID }}.md'
+    # -- Go text/template for commit message
+    commitMessageTemplate: "Add transcription {{ .JobID }}"
+    # -- Commit author name used for the commit metadata
+    authorName: "Gostwriter Bot"
+    # -- Commit author email used for the commit metadata
+    authorEmail: "bot@example.com"
+    # -- Optional override for the GitHub API base URL (e.g., for GH Enterprise)
+    apiBaseUrl: "https://api.github.com"
+    auth:
+      # -- Personal access token for GitHub REST API
+      token: ""
 
 # -- Optional Kubernetes CronJob for scheduled tasks
 # This chart does not define any default job logic. Configure command/args as needed.

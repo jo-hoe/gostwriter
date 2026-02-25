@@ -17,7 +17,7 @@ If the client sends `Prefer: respond-async`, the request is processed asynchrono
 
 - Prerequisites:
   - Docker (or Go 1.22+ if running from source)
-  - Git installed and a Personal Access Token (PAT) with repo write access (for the Git target)
+  - GitHub Personal Access Token (PAT) with repo write access (for the GitHub target)
   - Optional: an OpenAI-compatible AI Proxy if using `llm.provider: aiproxy` (defaults to mock otherwise)
 
 ## Configure
@@ -26,8 +26,8 @@ If the client sends `Prefer: respond-async`, the request is processed asynchrono
   - `dev/app-config.yaml` (used by docker-compose), or
   - `config.yaml` in the project root (used for local runs)
 - Minimum edits:
-  - Set `target.repoUrl`, `target.branch`
-  - Provide `target.auth.token` (either paste the PAT or use `${GIT_TOKEN}`)
+  - Set `target.github.repositoryOwner`, `target.github.repositoryName`, `target.github.branch`
+  - Provide `target.github.auth.token` (either paste the PAT or use `${GITHUB_TOKEN}`)
   - Choose LLM:
     - Mock (default): `llm.provider: "mock"` works without external services
     - AI Proxy: set `llm.provider: "aiproxy"`, `llm.aiproxy.baseUrl`, and `llm.aiproxy.apiKey` (or `${AIPROXY_API_KEY}`)
@@ -38,19 +38,19 @@ If the client sends `Prefer: respond-async`, the request is processed asynchrono
     provider: "mock"
 
   target:
-    type: "git"
-    name: "docs-main"
-    repoUrl: "https://github.com/yourorg/yourrepo.git"
-    branch: "main"
-    basePath: "inbox/"
-    filenameTemplate: "{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md"
-    commitMessageTemplate: "Add transcription {{ .JobID }}"
-    authorName: "Gostwriter Bot"
-    authorEmail: "bot@example.com"
-    auth:
-      type: "basic"
-      username: "git"
-      token: "${GIT_TOKEN}"
+    github:
+      enabled: true
+      repositoryOwner: "yourorg"
+      repositoryName: "yourrepo"
+      branch: "main"
+      basePath: "inbox/"
+      filenameTemplate: "{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md"
+      commitMessageTemplate: "Add transcription {{ .JobID }}"
+      authorName: "Gostwriter Bot"
+      authorEmail: "bot@example.com"
+      apiBaseUrl: "https://api.github.com"
+      auth:
+        token: "${GITHUB_TOKEN}"
   ```
 
 ### Run
@@ -114,7 +114,7 @@ curl "http://localhost:8080/v1/transcriptions/abcd-1234"
 ```
 
 - Stages: `queued` → `transcribing` → `posting` → `completed`
-- On success, the status includes `target_result` with `location` and `commit` from the Git post
+- On success, the status includes `target_result` with `location` and `commit` from the GitHub post
 
 Notes:
 

@@ -38,19 +38,18 @@ llm:
 
 # Single target configuration
 target:
-  type: "git"
-  name: "docs-main"
-  repoUrl: "https://github.com/yourorg/yourrepo.git"
-  branch: "main"
-  # Base path inside the repo to place the markdown (optional). Empty means repo root.
-  basePath: "inbox/"
-  filenameTemplate: "{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md"
-  commitMessageTemplate: "Add transcription {{ .JobID }}"
-  authorName: "Gostwriter Bot"
-  authorEmail: "bot@example.com"
-  # Optional: override clone cache location; defaults to storage_dir/repos
-  cloneCacheDir: ""
-  auth:
-    type: "basic"
-    username: "git"
-    token: "${GIT_TOKEN}"
+  github:
+    enabled: true
+    repositoryOwner: "yourorg"
+    repositoryName: "yourrepo"
+    branch: "main"
+    # Base path inside the repository to place the markdown (optional). Empty means repo root.
+    basePath: "inbox/"
+    filenameTemplate: "{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md"
+    commitMessageTemplate: "Add transcription {{ .JobID }}"
+    authorName: "Gostwriter Bot"
+    authorEmail: "bot@example.com"
+    # Optional: override the GitHub API base URL (e.g., for GitHub Enterprise)
+    apiBaseUrl: "https://api.github.com"
+    auth:
+      token: "${GITHUB_TOKEN}"

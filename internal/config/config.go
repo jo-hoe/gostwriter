@@ -15,9 +15,9 @@ import (
 
 // Config is the root configuration loaded from YAML.
 type Config struct {
-	Server ServerConfig `yaml:"server"`
-	LLM    LLMConfig    `yaml:"llm"`
-	Target TargetEntry  `yaml:"target"`
+	Server ServerConfig  `yaml:"server"`
+	LLM    LLMConfig     `yaml:"llm"`
+	Target TargetsConfig `yaml:"target"`
 }
 
 // ServerConfig holds HTTP server and runtime settings.
@@ -61,35 +61,29 @@ type AIProxySettings struct {
 	MaxTokens    int     `yaml:"maxTokens"`    // optional
 }
 
-// TargetEntry describes the single configured target (e.g., Git).
-type TargetEntry struct {
-	Type string `yaml:"type"`
-	Name string `yaml:"name"`
-
-	// Git-specific fields (used when Type == "git")
-	Git GitTargetConfig `yaml:"-"`
-	// Raw map to help custom unmarshalling
-	raw map[string]any
+// TargetsConfig groups all possible target backends.
+type TargetsConfig struct {
+	GitHub GitHubTargetConfig `yaml:"github"`
 }
 
-// GitTargetConfig config for posting to a Git repository.
-type GitTargetConfig struct {
-	RepoURL               string        `yaml:"repoUrl"`
-	Branch                string        `yaml:"branch"`
-	BasePath              string        `yaml:"basePath"`
-	FilenameTemplate      string        `yaml:"filenameTemplate"`
-	CommitMessageTemplate string        `yaml:"commitMessageTemplate"`
-	AuthorName            string        `yaml:"authorName"`
-	AuthorEmail           string        `yaml:"authorEmail"`
-	Auth                  GitAuthConfig `yaml:"auth"`
-	CloneCacheDir         string        `yaml:"cloneCacheDir"` // optional override for where to cache clones; defaults under storage_dir
+// GitHubTargetConfig config for posting to a GitHub repository via REST API.
+type GitHubTargetConfig struct {
+	Enabled               bool             `yaml:"enabled"`
+	RepositoryOwner       string           `yaml:"repositoryOwner"`
+	RepositoryName        string           `yaml:"repositoryName"`
+	Branch                string           `yaml:"branch"`
+	BasePath              string           `yaml:"basePath"`
+	FilenameTemplate      string           `yaml:"filenameTemplate"`
+	CommitMessageTemplate string           `yaml:"commitMessageTemplate"`
+	AuthorName            string           `yaml:"authorName"`
+	AuthorEmail           string           `yaml:"authorEmail"`
+	APIBaseURL            string           `yaml:"apiBaseUrl"` // optional, default https://api.github.com
+	Auth                  GitHubAuthConfig `yaml:"auth"`
 }
 
-// GitAuthConfig supports basic auth with PAT/token for HTTPS.
-type GitAuthConfig struct {
-	Type     string `yaml:"type"`     // "basic"
-	Username string `yaml:"username"` // often "git" for GitHub
-	Token    string `yaml:"token"`    // PAT or password; supports env expansion
+// GitHubAuthConfig holds token-based auth (Personal Access Token).
+type GitHubAuthConfig struct {
+	Token string `yaml:"token"` // PAT; supports env expansion
 }
 
 // ByteSize represents a size in bytes that unmarshals from strings like "10Mi", "20MB", "512KiB", "1024".
@@ -189,7 +183,7 @@ func Load(path string) (*Config, error) {
 
 	applyDefaults(&cfg)
 
-	if err := postProcessTarget(&cfg, expanded); err != nil {
+	if err := postProcessTargets(&cfg); err != nil {
 		return nil, err
 	}
 
@@ -268,76 +262,47 @@ func applyDefaults(cfg *Config) {
 	}
 }
 
-// postProcessTarget unmarshals per-target type configs and expands env in token fields if needed.
-func postProcessTarget(cfg *Config, expandedYAML string) error {
-	var rawNode struct {
-		Target map[string]any `yaml:"target"`
-	}
-	if err := yaml.Unmarshal([]byte(expandedYAML), &rawNode); err != nil {
-		return fmt.Errorf("parse raw target: %w", err)
-	}
-	entry := &cfg.Target
-	entry.raw = rawNode.Target
-	switch strings.ToLower(entry.Type) {
-	case "git":
-		var git GitTargetConfig
-		if err := decodeMap(entry.raw, &git); err != nil {
-			return fmt.Errorf("parse git target %q: %w", entry.Name, err)
+// postProcessTargets performs any normalization/defaulting needed for enabled targets.
+func postProcessTargets(cfg *Config) error {
+	// GitHub target
+	if cfg.Target.GitHub.Enabled {
+		cfg.Target.GitHub.BasePath = normalizePathPrefix(cfg.Target.GitHub.BasePath)
+		if strings.TrimSpace(cfg.Target.GitHub.APIBaseURL) == "" {
+			cfg.Target.GitHub.APIBaseURL = "https://api.github.com"
 		}
-		// Normalize base path to use forward slashes and ensure trailing slash if provided.
-		git.BasePath = normalizePathPrefix(git.BasePath)
-		entry.Git = git
-	default:
-		return fmt.Errorf("unsupported target type %q for %q", entry.Type, entry.Name)
 	}
 	return nil
 }
 
 func validate(cfg *Config) error {
-	// Validate target presence
-	if strings.TrimSpace(cfg.Target.Type) == "" || strings.TrimSpace(cfg.Target.Name) == "" {
-		return errors.New("target.type and target.name are required")
+	// Ensure at least one target is enabled
+	if !cfg.Target.GitHub.Enabled {
+		return errors.New("no target enabled")
 	}
 
-	// Validate git target
-	switch strings.ToLower(cfg.Target.Type) {
-	case "git":
-		g := cfg.Target.Git
-		if g.RepoURL == "" {
-			return fmt.Errorf("target %q: git.repoUrl is required", cfg.Target.Name)
+	// Validate enabled targets
+	if cfg.Target.GitHub.Enabled {
+		g := cfg.Target.GitHub
+		if strings.TrimSpace(g.RepositoryOwner) == "" {
+			return fmt.Errorf("github.repositoryOwner is required")
 		}
-		if g.Branch == "" {
-			return fmt.Errorf("target %q: git.branch is required", cfg.Target.Name)
+		if strings.TrimSpace(g.RepositoryName) == "" {
+			return fmt.Errorf("github.repositoryName is required")
 		}
-		if g.FilenameTemplate == "" {
-			return fmt.Errorf("target %q: git.filenameTemplate is required", cfg.Target.Name)
+		if strings.TrimSpace(g.Branch) == "" {
+			return fmt.Errorf("github.branch is required")
 		}
-		if g.CommitMessageTemplate == "" {
-			return fmt.Errorf("target %q: git.commitMessageTemplate is required", cfg.Target.Name)
+		if strings.TrimSpace(g.FilenameTemplate) == "" {
+			return fmt.Errorf("github.filenameTemplate is required")
 		}
-		if strings.ToLower(g.Auth.Type) != "basic" {
-			return fmt.Errorf("target %q: git.auth.type must be \"basic\"", cfg.Target.Name)
+		if strings.TrimSpace(g.CommitMessageTemplate) == "" {
+			return fmt.Errorf("github.commitMessageTemplate is required")
 		}
-		if g.Auth.Token == "" {
-			return fmt.Errorf("target %q: git.auth.token is required", cfg.Target.Name)
+		if strings.TrimSpace(g.Auth.Token) == "" {
+			return fmt.Errorf("github.auth.token is required")
 		}
-		if g.Auth.Username == "" {
-			g.Auth.Username = "git"
-			cfg.Target.Git.Auth.Username = "git"
-		}
-	default:
-		// already rejected in postProcessTarget
 	}
 	return nil
-}
-
-// decodeMap marshals a generic map into a struct.
-func decodeMap(m map[string]any, out any) error {
-	b, err := yaml.Marshal(m)
-	if err != nil {
-		return err
-	}
-	return yaml.Unmarshal(b, out)
 }
 
 func normalizePathPrefix(p string) string {

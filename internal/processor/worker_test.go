@@ -141,10 +141,10 @@ func TestWorker_Process_SuccessWithCallback(t *testing.T) {
 	// LLM and target mocks
 	llmClient := &llmMock{out: "markdown"}
 	tgt := &targetMock{
-		name: "docs",
+		name: "github",
 		res: targets.TargetResult{
-			TargetName: "docs",
-			Location:   "git:repo@main:path/file.md",
+			TargetName: "github",
+			Location:   "github:repo@main:path/file.md",
 			Commit:     "deadbeef",
 		},
 	}
@@ -158,9 +158,10 @@ func TestWorker_Process_SuccessWithCallback(t *testing.T) {
 			StorageDir:      t.TempDir(),
 			MaxUploadSize:   config.ByteSize(10 * 1024 * 1024),
 		},
-		Target: config.TargetEntry{
-			Type: "git",
-			Name: "docs",
+		Target: config.TargetsConfig{
+			GitHub: config.GitHubTargetConfig{
+				Enabled: true,
+			},
 		},
 	}
 
@@ -179,7 +180,7 @@ func TestWorker_Process_SuccessWithCallback(t *testing.T) {
 		ID:          "job-1",
 		ImagePath:   imgPath,
 		MimeType:    common.MimeImagePNG,
-		TargetName:  "docs",
+		TargetName:  "github",
 		CallbackURL: &cbURL,
 		Title:       &title,
 		Metadata:    meta,
@@ -215,7 +216,7 @@ func TestWorker_Process_SuccessWithCallback(t *testing.T) {
 func TestWorker_Process_LLMError_SetsFailed(t *testing.T) {
 	store := newMemStore()
 	llmClient := &llmMock{err: errors.New("boom")}
-	tgt := &targetMock{name: "docs"}
+	tgt := &targetMock{name: "github"}
 	reg := targets.NewRegistry()
 	reg.Add(tgt)
 
@@ -226,9 +227,10 @@ func TestWorker_Process_LLMError_SetsFailed(t *testing.T) {
 			StorageDir:      t.TempDir(),
 			MaxUploadSize:   config.ByteSize(10 * 1024 * 1024),
 		},
-		Target: config.TargetEntry{
-			Type: "git",
-			Name: "docs",
+		Target: config.TargetsConfig{
+			GitHub: config.GitHubTargetConfig{
+				Enabled: true,
+			},
 		},
 	}
 	worker := New(discardLogger(), cfg, store, llmClient, reg)
@@ -243,7 +245,7 @@ func TestWorker_Process_LLMError_SetsFailed(t *testing.T) {
 		ID:         "job-2",
 		ImagePath:  imgPath,
 		MimeType:   common.MimeImagePNG,
-		TargetName: "docs",
+		TargetName: "github",
 		Stage:      jobs.StageQueued,
 		CreatedAt:  time.Now().UTC(),
 	}

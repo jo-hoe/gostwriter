@@ -85,20 +85,18 @@ Helm chart for deploying Gostwriter
 | serviceAccount.automount | bool | `true` | Automatically mount a ServiceAccount's API credentials |
 | serviceAccount.create | bool | `true` | Specifies whether a service account should be created |
 | serviceAccount.name | string | `""` | The name of the service account to use. If not set and create is true, a name is generated using the fullname template |
-| target | object | `{"auth":{"token":"","type":"basic","username":"git"},"authorEmail":"bot@example.com","authorName":"Gostwriter Bot","basePath":"inbox/","branch":"main","cloneCacheDir":"","commitMessageTemplate":"Add transcription {{ .JobID }}","filenameTemplate":"{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md","name":"docs-main","repoUrl":"https://github.com/yourorg/yourrepo.git","type":"git"}` | Single target configuration (git) IMPORTANT: For Kubernetes, do NOT use env expansion inside the config. Provide the token directly inside a Secret-backed config.yaml (via configRaw or existingConfigSecret). |
-| target.auth.token | string | `""` | Personal access token / password for HTTPS auth |
-| target.auth.type | string | `"basic"` | Authentication type; only "basic" is supported (username + token) |
-| target.auth.username | string | `"git"` | Username for HTTPS auth (often "git") |
-| target.authorEmail | string | `"bot@example.com"` | Commit author email used for git operations |
-| target.authorName | string | `"Gostwriter Bot"` | Commit author name used for git operations |
-| target.basePath | string | `"inbox/"` | Base path in the repo where files are written |
-| target.branch | string | `"main"` | Branch to use for commits |
-| target.cloneCacheDir | string | `""` | Optional override for the clone cache location inside the container |
-| target.commitMessageTemplate | string | `"Add transcription {{ .JobID }}"` | Go text/template for commit message |
-| target.filenameTemplate | string | `"{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md"` | Go text/template for filename; has .Timestamp, .JobID, etc. |
-| target.name | string | `"docs-main"` | Logical name used to address the target |
-| target.repoUrl | string | `"https://github.com/yourorg/yourrepo.git"` | HTTPS repository URL to push content to |
-| target.type | string | `"git"` | Target type: only "git" is supported |
+| target | object | `{"github":{"apiBaseUrl":"https://api.github.com","auth":{"token":""},"authorEmail":"bot@example.com","authorName":"Gostwriter Bot","basePath":"inbox/","branch":"main","commitMessageTemplate":"Add transcription {{ .JobID }}","enabled":true,"filenameTemplate":"{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md","repositoryName":"yourrepo","repositoryOwner":"yourorg"}}` | Single target configuration (GitHub via REST API) IMPORTANT: For Kubernetes, do NOT use env expansion inside the config. Provide the token directly inside a Secret-backed config.yaml (via configRaw or existingConfigSecret). |
+| target.github | object | `{"apiBaseUrl":"https://api.github.com","auth":{"token":""},"authorEmail":"bot@example.com","authorName":"Gostwriter Bot","basePath":"inbox/","branch":"main","commitMessageTemplate":"Add transcription {{ .JobID }}","enabled":true,"filenameTemplate":"{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md","repositoryName":"yourrepo","repositoryOwner":"yourorg"}` | GitHub target configuration (REST API) |
+| target.github.apiBaseUrl | string | `"https://api.github.com"` | Optional override for the GitHub API base URL (e.g., for GH Enterprise) |
+| target.github.auth.token | string | `""` | Personal access token for GitHub REST API |
+| target.github.authorEmail | string | `"bot@example.com"` | Commit author email used for the commit metadata |
+| target.github.authorName | string | `"Gostwriter Bot"` | Commit author name used for the commit metadata |
+| target.github.basePath | string | `"inbox/"` | Base path in the repository where files are written |
+| target.github.branch | string | `"main"` | Branch to use for commits |
+| target.github.commitMessageTemplate | string | `"Add transcription {{ .JobID }}"` | Go text/template for commit message |
+| target.github.enabled | bool | `true` | Enable/disable the GitHub target |
+| target.github.filenameTemplate | string | `"{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md"` | Go text/template for filename; has .Timestamp, .JobID, etc. |
+| target.github.repositoryOwner | string | `"yourorg"` | GitHub repository owner and name |
 | tolerations | list | `[]` | Tolerations for Pod assignment |
 
 ----------------------------------------------

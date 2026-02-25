@@ -3,9 +3,9 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"path"
@@ -95,7 +95,15 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 	uploaded := fileHeader[0]
 
 	// Target is fixed by configuration; request cannot override
-	targetName := svc.Cfg.Target.Name
+	// Derive target by enabled backend. Currently supports only GitHub.
+	targetName := ""
+	if svc.Cfg.Target.GitHub.Enabled {
+		targetName = "github"
+	}
+	if targetName == "" {
+		http.Error(w, "no target configured", http.StatusServiceUnavailable)
+		return
+	}
 
 	// Optional fields
 	callbackURLPtr, err := parseOptionalURL(r.FormValue("callback_url"))

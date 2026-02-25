@@ -164,9 +164,10 @@ func TestCreateTranscription_Synchronous200(t *testing.T) {
 				CallbackRetries: 1,
 				CallbackBackoff: 10 * time.Millisecond,
 			},
-			Target: config.TargetEntry{
-				Type: "git",
-				Name: "docs",
+			Target: config.TargetsConfig{
+				GitHub: config.GitHubTargetConfig{
+					Enabled: true,
+				},
 			},
 		},
 		Store:     store,
@@ -219,9 +220,10 @@ func TestCreateTranscription_Asynchronous202(t *testing.T) {
 				CallbackRetries: 1,
 				CallbackBackoff: 10 * time.Millisecond,
 			},
-			Target: config.TargetEntry{
-				Type: "git",
-				Name: "docs",
+			Target: config.TargetsConfig{
+				GitHub: config.GitHubTargetConfig{
+					Enabled: true,
+				},
 			},
 		},
 		Store:     store,
