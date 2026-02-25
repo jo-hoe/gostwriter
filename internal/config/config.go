@@ -15,8 +15,8 @@ import (
 
 // Config is the root configuration loaded from YAML.
 type Config struct {
-	Server ServerConfig `yaml:"server"`
-	LLM    LLMConfig    `yaml:"llm"`
+	Server ServerConfig  `yaml:"server"`
+	LLM    LLMConfig     `yaml:"llm"`
 	Target TargetsConfig `yaml:"target"`
 }
 
