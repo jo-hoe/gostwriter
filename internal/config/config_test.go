@@ -78,19 +78,17 @@ llm:
     prefix: "prefix"
 
 target:
-  type: "git"
+  type: "github"
   name: "docs"
-  repoUrl: "https://example.com/repo.git"
+  repoOwner: "example"
+  repoName: "repo"
   branch: "main"
   basePath: "inbox/"
   filenameTemplate: "{{ .JobID }}.md"
   commitMessageTemplate: "Add {{ .JobID }}"
   authorName: "Bot"
   authorEmail: "bot@example.com"
-  cloneCacheDir: ""
   auth:
-    type: "basic"
-    username: "git"
     token: "${GIT_TOKEN}"
 `
 	if err := os.WriteFile(cfgPath, []byte(yaml), 0o600); err != nil {
@@ -128,13 +126,13 @@ target:
 	}
 
 	// Target
-	if cfg.Target.Type != "git" || cfg.Target.Name != "docs" {
+	if cfg.Target.Type != "github" || cfg.Target.Name != "docs" {
 		t.Fatalf("target type/name mismatch")
 	}
-	if cfg.Target.Git.RepoURL != "https://example.com/repo.git" || cfg.Target.Git.Branch != "main" {
-		t.Fatalf("git target repo/branch mismatch")
+	if cfg.Target.GitHub.RepoOwner != "example" || cfg.Target.GitHub.RepoName != "repo" || cfg.Target.GitHub.Branch != "main" {
+		t.Fatalf("github target repo/branch mismatch")
 	}
-	if cfg.Target.Git.Auth.Token != "secret123" {
+	if cfg.Target.GitHub.Auth.Token != "secret123" {
 		t.Fatalf("env expansion for token failed")
 	}
 

@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -19,7 +18,7 @@ import (
 	"github.com/jo-hoe/gostwriter/internal/server"
 	"github.com/jo-hoe/gostwriter/internal/storage"
 	"github.com/jo-hoe/gostwriter/internal/targets"
-	gitTarget "github.com/jo-hoe/gostwriter/internal/targets/git"
+	githubTarget "github.com/jo-hoe/gostwriter/internal/targets/github"
 )
 
 func parseLogLevel(s string) slog.Level {
@@ -65,12 +64,11 @@ func main() {
 
 	// Target (single)
 	reg := targets.NewRegistry()
-	reposRoot := filepath.Join(cfg.Server.StorageDir, common.ReposDirName)
 	switch cfg.Target.Type {
-	case "git":
-		t, err := gitTarget.New(cfg.Target.Name, cfg.Target.Git, reposRoot)
+	case "github":
+		t, err := githubTarget.New(cfg.Target.Name, cfg.Target.GitHub)
 		if err != nil {
-			logger.Error("init git target", "name", cfg.Target.Name, "err", err)
+			logger.Error("init github target", "name", cfg.Target.Name, "err", err)
 			os.Exit(1)
 		}
 		reg.Add(t)

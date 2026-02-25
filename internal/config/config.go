@@ -66,30 +66,29 @@ type TargetEntry struct {
 	Type string `yaml:"type"`
 	Name string `yaml:"name"`
 
-	// Git-specific fields (used when Type == "git")
-	Git GitTargetConfig `yaml:"-"`
+	// GitHub-specific fields (used when Type == "github")
+	GitHub GitHubTargetConfig `yaml:"-"`
 	// Raw map to help custom unmarshalling
 	raw map[string]any
 }
 
-// GitTargetConfig config for posting to a Git repository.
-type GitTargetConfig struct {
-	RepoURL               string        `yaml:"repoUrl"`
-	Branch                string        `yaml:"branch"`
-	BasePath              string        `yaml:"basePath"`
-	FilenameTemplate      string        `yaml:"filenameTemplate"`
-	CommitMessageTemplate string        `yaml:"commitMessageTemplate"`
-	AuthorName            string        `yaml:"authorName"`
-	AuthorEmail           string        `yaml:"authorEmail"`
-	Auth                  GitAuthConfig `yaml:"auth"`
-	CloneCacheDir         string        `yaml:"cloneCacheDir"` // optional override for where to cache clones; defaults under storage_dir
+// GitHubTargetConfig config for posting to a GitHub repository via REST API.
+type GitHubTargetConfig struct {
+	RepoOwner             string           `yaml:"repoOwner"`
+	RepoName              string           `yaml:"repoName"`
+	Branch                string           `yaml:"branch"`
+	BasePath              string           `yaml:"basePath"`
+	FilenameTemplate      string           `yaml:"filenameTemplate"`
+	CommitMessageTemplate string           `yaml:"commitMessageTemplate"`
+	AuthorName            string           `yaml:"authorName"`
+	AuthorEmail           string           `yaml:"authorEmail"`
+	APIBaseURL            string           `yaml:"apiBaseUrl"` // optional, default https://api.github.com
+	Auth                  GitHubAuthConfig `yaml:"auth"`
 }
 
-// GitAuthConfig supports basic auth with PAT/token for HTTPS.
-type GitAuthConfig struct {
-	Type     string `yaml:"type"`     // "basic"
-	Username string `yaml:"username"` // often "git" for GitHub
-	Token    string `yaml:"token"`    // PAT or password; supports env expansion
+// GitHubAuthConfig holds token-based auth (Personal Access Token).
+type GitHubAuthConfig struct {
+	Token string `yaml:"token"` // PAT; supports env expansion
 }
 
 // ByteSize represents a size in bytes that unmarshals from strings like "10Mi", "20MB", "512KiB", "1024".
@@ -279,14 +278,18 @@ func postProcessTarget(cfg *Config, expandedYAML string) error {
 	entry := &cfg.Target
 	entry.raw = rawNode.Target
 	switch strings.ToLower(entry.Type) {
-	case "git":
-		var git GitTargetConfig
-		if err := decodeMap(entry.raw, &git); err != nil {
-			return fmt.Errorf("parse git target %q: %w", entry.Name, err)
+	case "github":
+		var gh GitHubTargetConfig
+		if err := decodeMap(entry.raw, &gh); err != nil {
+			return fmt.Errorf("parse github target %q: %w", entry.Name, err)
 		}
 		// Normalize base path to use forward slashes and ensure trailing slash if provided.
-		git.BasePath = normalizePathPrefix(git.BasePath)
-		entry.Git = git
+		gh.BasePath = normalizePathPrefix(gh.BasePath)
+		// Default API base URL
+		if strings.TrimSpace(gh.APIBaseURL) == "" {
+			gh.APIBaseURL = "https://api.github.com"
+		}
+		entry.GitHub = gh
 	default:
 		return fmt.Errorf("unsupported target type %q for %q", entry.Type, entry.Name)
 	}
@@ -299,31 +302,27 @@ func validate(cfg *Config) error {
 		return errors.New("target.type and target.name are required")
 	}
 
-	// Validate git target
+	// Validate github target
 	switch strings.ToLower(cfg.Target.Type) {
-	case "git":
-		g := cfg.Target.Git
-		if g.RepoURL == "" {
-			return fmt.Errorf("target %q: git.repoUrl is required", cfg.Target.Name)
+	case "github":
+		g := cfg.Target.GitHub
+		if strings.TrimSpace(g.RepoOwner) == "" {
+			return fmt.Errorf("target %q: github.repoOwner is required", cfg.Target.Name)
 		}
-		if g.Branch == "" {
-			return fmt.Errorf("target %q: git.branch is required", cfg.Target.Name)
+		if strings.TrimSpace(g.RepoName) == "" {
+			return fmt.Errorf("target %q: github.repoName is required", cfg.Target.Name)
 		}
-		if g.FilenameTemplate == "" {
-			return fmt.Errorf("target %q: git.filenameTemplate is required", cfg.Target.Name)
+		if strings.TrimSpace(g.Branch) == "" {
+			return fmt.Errorf("target %q: github.branch is required", cfg.Target.Name)
 		}
-		if g.CommitMessageTemplate == "" {
-			return fmt.Errorf("target %q: git.commitMessageTemplate is required", cfg.Target.Name)
+		if strings.TrimSpace(g.FilenameTemplate) == "" {
+			return fmt.Errorf("target %q: github.filenameTemplate is required", cfg.Target.Name)
 		}
-		if strings.ToLower(g.Auth.Type) != "basic" {
-			return fmt.Errorf("target %q: git.auth.type must be \"basic\"", cfg.Target.Name)
+		if strings.TrimSpace(g.CommitMessageTemplate) == "" {
+			return fmt.Errorf("target %q: github.commitMessageTemplate is required", cfg.Target.Name)
 		}
-		if g.Auth.Token == "" {
-			return fmt.Errorf("target %q: git.auth.token is required", cfg.Target.Name)
-		}
-		if g.Auth.Username == "" {
-			g.Auth.Username = "git"
-			cfg.Target.Git.Auth.Username = "git"
+		if strings.TrimSpace(g.Auth.Token) == "" {
+			return fmt.Errorf("target %q: github.auth.token is required", cfg.Target.Name)
 		}
 	default:
 		// already rejected in postProcessTarget

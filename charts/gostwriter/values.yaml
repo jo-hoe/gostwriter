@@ -153,16 +153,17 @@ llm:
     # -- Prefix added by the mock provider
     prefix: "Transcribed by Mock"
 
-# -- Single target configuration (git)
+# -- Single target configuration (GitHub via REST API)
 # IMPORTANT: For Kubernetes, do NOT use env expansion inside the config.
 # Provide the token directly inside a Secret-backed config.yaml (via configRaw or existingConfigSecret).
 target:
-  # -- Target type: only "git" is supported
-  type: "git"
+  # -- Target type: only "github" is supported
+  type: "github"
   # -- Logical name used to address the target
   name: "docs-main"
-  # -- HTTPS repository URL to push content to
-  repoUrl: "https://github.com/yourorg/yourrepo.git"
+  # -- GitHub repository owner and name
+  repoOwner: "yourorg"
+  repoName: "yourrepo"
   # -- Branch to use for commits
   branch: "main"
   # -- Base path in the repo where files are written
@@ -171,18 +172,14 @@ target:
   filenameTemplate: '{{ .Timestamp.Format "20060102-150405" }}-{{ .JobID }}.md'
   # -- Go text/template for commit message
   commitMessageTemplate: "Add transcription {{ .JobID }}"
-  # -- Commit author name used for git operations
+  # -- Commit author name used for the commit metadata
   authorName: "Gostwriter Bot"
-  # -- Commit author email used for git operations
+  # -- Commit author email used for the commit metadata
   authorEmail: "bot@example.com"
-  # -- Optional override for the clone cache location inside the container
-  cloneCacheDir: ""
+  # -- Optional override for the GitHub API base URL (e.g., for GH Enterprise)
+  apiBaseUrl: "https://api.github.com"
   auth:
-    # -- Authentication type; only "basic" is supported (username + token)
-    type: "basic"
-    # -- Username for HTTPS auth (often "git")
-    username: "git"
-    # -- Personal access token / password for HTTPS auth
+    # -- Personal access token for GitHub REST API
     token: ""
 
 # -- Optional Kubernetes CronJob for scheduled tasks
