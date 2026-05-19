@@ -3,6 +3,7 @@ package aiproxy
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -16,6 +17,12 @@ import (
 	"github.com/jo-hoe/gostwriter/internal/config"
 	"github.com/jo-hoe/gostwriter/internal/llm"
 )
+
+//go:embed default_system_prompt.txt
+var defaultSystemPrompt string
+
+//go:embed default_instructions.txt
+var defaultInstructions string
 
 var _ llm.Client = (*Client)(nil)
 
@@ -36,10 +43,6 @@ const (
 	// Timeouts and limits
 	defaultTimeout    = 60 * time.Second
 	errorSnippetLimit = 400
-
-	// Defaults
-	defaultSystemPrompt = "You are an expert OCR and document understanding assistant. Transcribe the provided image into clean, readable Markdown. Preserve headings, lists, tables, code blocks, and semantic structure. Do not add commentary; output only the transcription."
-	defaultInstructions = "Please transcribe the content of this image into Markdown. Keep the original structure and formatting."
 
 	// Data URL constants
 	dataURLPrefix    = "data:"
