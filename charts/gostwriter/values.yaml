@@ -147,6 +147,8 @@ llm:
     temperature: 0
     # -- Maximum tokens for responses (0 uses provider default)
     maxTokens: 0
+    # -- HTTP client timeout for LLM requests (0 uses default of 5m)
+    timeout: "0"
   mock:
     # -- Artificial delay for mock responses
     delay: 2s

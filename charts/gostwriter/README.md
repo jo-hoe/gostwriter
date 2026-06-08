@@ -1,6 +1,6 @@
 # gostwriter
 
-![Version: 0.1.1](https://img.shields.io/badge/Version-0.1.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.1.1](https://img.shields.io/badge/AppVersion-0.1.1-informational?style=flat-square)
+![Version: 0.2.0](https://img.shields.io/badge/Version-0.2.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.0](https://img.shields.io/badge/AppVersion-0.2.0-informational?style=flat-square)
 
 Helm chart for deploying Gostwriter
 
@@ -47,6 +47,7 @@ Helm chart for deploying Gostwriter
 | llm.aiproxy.model | string | `"gpt-5"` | Model name to use |
 | llm.aiproxy.systemPrompt | string | `""` | Optional system prompt override |
 | llm.aiproxy.temperature | int | `0` | Sampling temperature |
+| llm.aiproxy.timeout | string | `"0"` | HTTP client timeout for LLM requests (0 uses default of 5m) |
 | llm.mock.delay | string | `"2s"` | Artificial delay for mock responses |
 | llm.mock.prefix | string | `"Transcribed by Mock"` | Prefix added by the mock provider |
 | llm.provider | string | `"mock"` | Provider selection: "mock" or "aiproxy" |

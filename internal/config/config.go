@@ -52,13 +52,14 @@ type MockSettings struct {
 
 // AIProxySettings config for the AI Proxy (OpenAI-compatible) LLM.
 type AIProxySettings struct {
-	BaseURL      string  `yaml:"baseUrl"`      // e.g. http://localhost:8900
-	APIKey       string  `yaml:"apiKey"`       // optional
-	Model        string  `yaml:"model"`        // e.g. gpt-5
-	SystemPrompt string  `yaml:"systemPrompt"` // optional system message override
-	Instructions string  `yaml:"instructions"` // optional user instruction override
-	Temperature  float32 `yaml:"temperature"`  // optional
-	MaxTokens    int     `yaml:"maxTokens"`    // optional
+	BaseURL      string        `yaml:"baseUrl"`      // e.g. http://localhost:8900
+	APIKey       string        `yaml:"apiKey"`       // optional
+	Model        string        `yaml:"model"`        // e.g. gpt-5
+	SystemPrompt string        `yaml:"systemPrompt"` // optional system message override
+	Instructions string        `yaml:"instructions"` // optional user instruction override
+	Temperature  float32       `yaml:"temperature"`  // optional
+	MaxTokens    int           `yaml:"maxTokens"`    // optional
+	Timeout      time.Duration `yaml:"timeout"`      // HTTP client timeout; 0 → default of 5m
 }
 
 // TargetsConfig groups all possible target backends.

@@ -41,8 +41,8 @@ const (
 	endpointChatCompletions = "v1/chat/completions"
 
 	// Timeouts and limits
-	defaultTimeout    = 60 * time.Second
-	errorSnippetLimit = 400
+	defaultHTTPTimeout = 5 * time.Minute
+	errorSnippetLimit  = 400
 
 	// Data URL constants
 	dataURLPrefix    = "data:"
@@ -81,7 +81,7 @@ type Client struct {
 // New creates a new AI Proxy LLM client.
 func New(cfg config.AIProxySettings) *Client {
 	return &Client{
-		httpClient:  newHTTPClient(),
+		httpClient:  newHTTPClient(cfg.Timeout),
 		baseURL:     strings.TrimRight(cfg.BaseURL, "/"),
 		apiKey:      cfg.APIKey,
 		model:       cfg.Model,
@@ -92,8 +92,11 @@ func New(cfg config.AIProxySettings) *Client {
 	}
 }
 
-func newHTTPClient() *http.Client {
-	return &http.Client{Timeout: defaultTimeout}
+func newHTTPClient(timeout time.Duration) *http.Client {
+	if timeout == 0 {
+		timeout = defaultHTTPTimeout
+	}
+	return &http.Client{Timeout: timeout}
 }
 
 // TranscribeImage sends a chat completion request instructing the model to transcribe the image into Markdown.
