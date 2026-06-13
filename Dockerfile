@@ -18,7 +18,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/gostwriter ./cmd/gostwriter
 
 # Stage 2: minimal runtime with git available (required by targets/git)
-FROM alpine:3.23
+FROM alpine:3.24
 
 # Install runtime dependencies
 # - ca-certificates: for HTTPS (git over https)
