@@ -147,3 +147,76 @@ func escapeBackslashes(p string) string {
 	// On Windows, YAML literal may require escaping backslashes
 	return strings.ReplaceAll(p, `\`, `\\`)
 }
+
+func makeMinimalGitHubYAML(dir, extra string) string {
+	return `
+server:
+  address: ":0"
+  storageDir: "` + escapeBackslashes(dir) + `"
+llm:
+  provider: "mock"
+target:
+  github:
+    enabled: true
+    repositoryOwner: "org"
+    repositoryName: "repo"
+    branch: "main"
+    filenameTemplate: "{{ .JobID }}.md"
+    commitMessageTemplate: "Add {{ .JobID }}"
+    auth:
+      token: "tok"
+` + extra
+}
+
+func TestLoad_NamingStrategyDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(makeMinimalGitHubYAML(dir, "")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Target.GitHub.NamingStrategy != "template" {
+		t.Fatalf("expected default namingStrategy=template, got %q", cfg.Target.GitHub.NamingStrategy)
+	}
+}
+
+func TestLoad_NewGitHubFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	extra := `    generateTitle: true
+    namingStrategy: "title"
+`
+	if err := os.WriteFile(path, []byte(makeMinimalGitHubYAML(dir, extra)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.Target.GitHub.GenerateTitle {
+		t.Fatal("expected generateTitle=true")
+	}
+	if cfg.Target.GitHub.NamingStrategy != "title" {
+		t.Fatalf("expected namingStrategy=title, got %q", cfg.Target.GitHub.NamingStrategy)
+	}
+}
+
+func TestLoad_NamingStrategyValidation(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	extra := `    namingStrategy: "invalid"
+`
+	if err := os.WriteFile(path, []byte(makeMinimalGitHubYAML(dir, extra)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected validation error for invalid namingStrategy")
+	}
+	if !strings.Contains(err.Error(), "namingStrategy") {
+		t.Fatalf("error should mention namingStrategy, got: %v", err)
+	}
+}

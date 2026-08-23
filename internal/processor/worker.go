@@ -66,9 +66,24 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 		w.Log.Info("transcription completed", "job_id", job.ID)
 	}
 
+	// Resolve effective title: user-supplied takes priority; LLM generates one as fallback.
+	effectiveTitle := job.Title
+	if (effectiveTitle == nil || *effectiveTitle == "") && w.Cfg.Target.GitHub.GenerateTitle {
+		if gen, ok := w.LLM.(llm.TitleGenerator); ok {
+			generated, titleErr := gen.GenerateTitle(ctx, md)
+			if titleErr != nil {
+				if w.Log != nil {
+					w.Log.Warn("title generation failed, continuing without title", "job_id", job.ID, "err", titleErr)
+				}
+			} else if generated != "" {
+				effectiveTitle = &generated
+			}
+		}
+	}
+
 	// Optionally prepend title as Markdown H1.
-	if job.Title != nil && *job.Title != "" {
-		md = fmt.Sprintf("# %s\n\n%s", *job.Title, md)
+	if effectiveTitle != nil && *effectiveTitle != "" {
+		md = fmt.Sprintf("# %s\n\n%s", *effectiveTitle, md)
 	}
 
 	// Posting stage
@@ -90,7 +105,7 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 	req := targets.TargetRequest{
 		JobID:          job.ID,
 		Markdown:       md,
-		SuggestedTitle: job.Title,
+		SuggestedTitle: effectiveTitle,
 		Metadata:       job.Metadata,
 		Timestamp:      time.Now().UTC(),
 	}

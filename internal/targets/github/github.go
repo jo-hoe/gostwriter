@@ -12,20 +12,22 @@ import (
 	"text/template"
 
 	appcfg "github.com/jo-hoe/gostwriter/internal/config"
+	"github.com/jo-hoe/gostwriter/internal/naming"
 	"github.com/jo-hoe/gostwriter/internal/targets"
 )
 
 // Target implements a GitHub markdown post target using the GitHub REST API
 // to create file contents without cloning the repository.
 type Target struct {
-	name string
-	cfg  appcfg.GitHubTargetConfig
-	http *http.Client
+	name  string
+	cfg   appcfg.GitHubTargetConfig
+	http  *http.Client
+	namer naming.FileNamer
 }
 
 // New creates a GitHub Target with the provided config.
 // Uses http.DefaultClient unless a custom client is provided via WithHTTPClient.
-func New(name string, cfg appcfg.GitHubTargetConfig) (*Target, error) {
+func New(name string, cfg appcfg.GitHubTargetConfig, namer naming.FileNamer) (*Target, error) {
 	if strings.TrimSpace(cfg.Auth.Token) == "" {
 		return nil, fmt.Errorf("github token must not be empty")
 	}
@@ -39,9 +41,10 @@ func New(name string, cfg appcfg.GitHubTargetConfig) (*Target, error) {
 		cfg.APIBaseURL = "https://api.github.com"
 	}
 	return &Target{
-		name: name,
-		cfg:  cfg,
-		http: http.DefaultClient,
+		name:  name,
+		cfg:   cfg,
+		http:  http.DefaultClient,
+		namer: namer,
 	}, nil
 }
 
@@ -54,8 +57,22 @@ func (t *Target) WithHTTPClient(c *http.Client) *Target {
 func (t *Target) Name() string { return t.name }
 
 func (t *Target) Post(ctx context.Context, req targets.TargetRequest) (targets.TargetResult, error) {
-	// Render filename/path
-	filename, err := t.renderFilename(req)
+	// Resolve filename via the injected naming strategy.
+	nr := naming.NamingRequest{
+		JobID:          req.JobID,
+		Timestamp:      req.Timestamp,
+		SuggestedTitle: req.SuggestedTitle,
+		Metadata:       req.Metadata,
+		BasePath:       t.cfg.BasePath,
+		Extension:      ".md",
+	}
+	var filename string
+	var err error
+	if cn, ok := t.namer.(*naming.CollisionNamer); ok {
+		filename, err = cn.NameWithContext(ctx, nr)
+	} else {
+		filename, err = t.namer.Name(nr)
+	}
 	if err != nil {
 		return targets.TargetResult{}, err
 	}
@@ -137,21 +154,6 @@ func (t *Target) Post(ctx context.Context, req targets.TargetRequest) (targets.T
 		Location:   loc,
 		Commit:     commitSHA,
 	}, nil
-}
-
-func (t *Target) renderFilename(req targets.TargetRequest) (string, error) {
-	data := t.templateData(req)
-	name, err := t.render(t.cfg.FilenameTemplate, "{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md", "filename", data)
-	if err != nil {
-		return "", err
-	}
-	if name == "" {
-		name = fmt.Sprintf("%s-%s.md", req.Timestamp.Format("20060102-150405"), req.JobID)
-	}
-	if t.cfg.BasePath != "" {
-		name = filepath.Join(t.cfg.BasePath, name)
-	}
-	return name, nil
 }
 
 func (t *Target) renderCommitMessage(req targets.TargetRequest) (string, error) {

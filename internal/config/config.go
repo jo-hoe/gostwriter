@@ -80,6 +80,12 @@ type GitHubTargetConfig struct {
 	AuthorEmail           string           `yaml:"authorEmail"`
 	APIBaseURL            string           `yaml:"apiBaseUrl"` // optional, default https://api.github.com
 	Auth                  GitHubAuthConfig `yaml:"auth"`
+	// GenerateTitle causes the LLM to generate a title from the transcription
+	// when the caller did not supply one.
+	GenerateTitle bool `yaml:"generateTitle"`
+	// NamingStrategy selects the FileNamer implementation.
+	// Valid values: "template" (default), "title"
+	NamingStrategy string `yaml:"namingStrategy"`
 }
 
 // GitHubAuthConfig holds token-based auth (Personal Access Token).
@@ -271,6 +277,9 @@ func postProcessTargets(cfg *Config) error {
 		if strings.TrimSpace(cfg.Target.GitHub.APIBaseURL) == "" {
 			cfg.Target.GitHub.APIBaseURL = "https://api.github.com"
 		}
+		if strings.TrimSpace(cfg.Target.GitHub.NamingStrategy) == "" {
+			cfg.Target.GitHub.NamingStrategy = "template"
+		}
 	}
 	return nil
 }
@@ -301,6 +310,12 @@ func validate(cfg *Config) error {
 		}
 		if strings.TrimSpace(g.Auth.Token) == "" {
 			return fmt.Errorf("github.auth.token is required")
+		}
+		switch g.NamingStrategy {
+		case "template", "title":
+			// valid
+		default:
+			return fmt.Errorf("github.namingStrategy must be \"template\" or \"title\", got %q", g.NamingStrategy)
 		}
 	}
 	return nil

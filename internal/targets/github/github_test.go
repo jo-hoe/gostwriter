@@ -10,10 +10,32 @@ import (
 	"time"
 
 	appcfg "github.com/jo-hoe/gostwriter/internal/config"
+	"github.com/jo-hoe/gostwriter/internal/naming"
 	"github.com/jo-hoe/gostwriter/internal/targets"
 )
 
-func TestRenderFilenameAndCommitMessage(t *testing.T) {
+// stubNamer returns a fixed path regardless of the request.
+type stubNamer struct{ path string }
+
+func (s *stubNamer) Name(_ naming.NamingRequest) (string, error) { return s.path, nil }
+
+func newTestTarget(t *testing.T, cfg appcfg.GitHubTargetConfig, namer naming.FileNamer) *Target {
+	t.Helper()
+	if namer == nil {
+		var err error
+		namer, err = naming.NewTemplateNamer(cfg.FilenameTemplate, `{{ .JobID }}.md`, cfg.BasePath)
+		if err != nil {
+			t.Fatalf("NewTemplateNamer: %v", err)
+		}
+	}
+	tg, err := New("docs", cfg, namer)
+	if err != nil {
+		t.Fatalf("New github target: %v", err)
+	}
+	return tg
+}
+
+func TestRenderCommitMessage(t *testing.T) {
 	cfg := appcfg.GitHubTargetConfig{
 		BasePath:              "inbox/",
 		FilenameTemplate:      "{{ .JobID }}.md",
@@ -23,10 +45,7 @@ func TestRenderFilenameAndCommitMessage(t *testing.T) {
 		Branch:                "main",
 		Auth:                  appcfg.GitHubAuthConfig{Token: "x"},
 	}
-	tg, err := New("docs", cfg)
-	if err != nil {
-		t.Fatalf("New github target: %v", err)
-	}
+	tg := newTestTarget(t, cfg, nil)
 
 	req := targets.TargetRequest{
 		JobID:     "job-123",
@@ -34,15 +53,7 @@ func TestRenderFilenameAndCommitMessage(t *testing.T) {
 		Timestamp: time.Now().UTC(),
 		Metadata:  map[string]any{"k": "v"},
 	}
-	fn, err := tg.renderFilename(req)
-	if err != nil {
-		t.Fatalf("renderFilename: %v", err)
-	}
-	// Normalize path separators for cross-platform assertion
-	norm := strings.ReplaceAll(fn, `\`, `/`)
-	if !strings.HasSuffix(norm, "inbox/job-123.md") {
-		t.Fatalf("filename mismatch: %s", fn)
-	}
+
 	msg, err := tg.renderCommitMessage(req)
 	if err != nil {
 		t.Fatalf("renderCommitMessage: %v", err)
@@ -51,10 +62,8 @@ func TestRenderFilenameAndCommitMessage(t *testing.T) {
 		t.Fatalf("commit message mismatch: %s", msg)
 	}
 
-	// Also ensure default templates get used if empty
-	tg.cfg.FilenameTemplate = ""
+	// Default commit message template
 	tg.cfg.CommitMessageTemplate = ""
-	_, _ = tg.renderFilename(req)
 	_, _ = tg.renderCommitMessage(req)
 }
 
@@ -98,10 +107,7 @@ func TestNameAndPost(t *testing.T) {
 		AuthorEmail:           "bot@example.com",
 		Auth:                  appcfg.GitHubAuthConfig{Token: "token123"},
 	}
-	tg, err := New("docs", cfg)
-	if err != nil {
-		t.Fatalf("New github target: %v", err)
-	}
+	tg := newTestTarget(t, cfg, nil)
 	if tg.Name() != "docs" {
 		t.Fatalf("Name() mismatch: %s", tg.Name())
 	}
@@ -143,5 +149,97 @@ func TestNameAndPost(t *testing.T) {
 	// Content is base64; we just ensure it exists
 	if received.Body["content"] == nil || received.Body["content"] == "" {
 		t.Fatalf("payload content missing")
+	}
+}
+
+func TestPost_UsesInjectedNamer(t *testing.T) {
+	var putPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		putPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"content": map[string]any{"path": "custom/fixed-name.md"},
+			"commit":  map[string]any{"sha": "abc"},
+		})
+	}))
+	defer srv.Close()
+
+	cfg := appcfg.GitHubTargetConfig{
+		RepositoryOwner:       "org",
+		RepositoryName:        "repo",
+		Branch:                "main",
+		CommitMessageTemplate: "Add {{ .JobID }}",
+		APIBaseURL:            srv.URL,
+		Auth:                  appcfg.GitHubAuthConfig{Token: "tok"},
+	}
+	namer := &stubNamer{path: "custom/fixed-name.md"}
+	tg := newTestTarget(t, cfg, namer)
+	tg.WithHTTPClient(srv.Client())
+
+	_, err := tg.Post(context.Background(), targets.TargetRequest{
+		JobID: "j1", Markdown: "hello", Timestamp: time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+	if !strings.HasSuffix(putPath, "custom/fixed-name.md") {
+		t.Fatalf("PUT path should use injected namer path, got: %s", putPath)
+	}
+}
+
+func TestPost_CollisionNamerContextPropagated(t *testing.T) {
+	var requestPaths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestPaths = append(requestPaths, r.URL.Path)
+		if r.Method == http.MethodGet {
+			// First GET: file exists; second GET: free
+			if len(requestPaths) == 1 {
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(map[string]any{"name": "note.md"})
+			} else {
+				w.WriteHeader(http.StatusNotFound)
+				_ = json.NewEncoder(w).Encode(map[string]any{"message": "Not Found"})
+			}
+			return
+		}
+		// PUT response
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"content": map[string]any{"path": "inbox/note-1.md"},
+			"commit":  map[string]any{"sha": "abc"},
+		})
+	}))
+	defer srv.Close()
+
+	cfg := appcfg.GitHubTargetConfig{
+		RepositoryOwner:       "org",
+		RepositoryName:        "repo",
+		Branch:                "main",
+		CommitMessageTemplate: "Add {{ .JobID }}",
+		APIBaseURL:            srv.URL,
+		Auth:                  appcfg.GitHubAuthConfig{Token: "tok"},
+	}
+
+	title := "note"
+	inner := naming.NewTitleNamer("inbox/", ".md")
+	checker := naming.NewGitHubPathChecker(srv.Client(), srv.URL, "org", "repo", "main", "tok")
+	collisionNamer := naming.NewCollisionNamer(inner, checker, 10)
+
+	tg := newTestTarget(t, cfg, collisionNamer)
+	tg.WithHTTPClient(srv.Client())
+
+	_, err := tg.Post(context.Background(), targets.TargetRequest{
+		JobID: "j1", Markdown: "hello", Timestamp: time.Now(),
+		SuggestedTitle: &title,
+	})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+	// Verify the final PUT used the suffixed name
+	lastPath := requestPaths[len(requestPaths)-1]
+	if !strings.HasSuffix(lastPath, "note-1.md") {
+		t.Fatalf("expected PUT to suffixed path, got: %s", lastPath)
 	}
 }

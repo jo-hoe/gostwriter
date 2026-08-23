@@ -126,6 +126,82 @@ func TestAIProxy_TranscribeImage_EmptyImage(t *testing.T) {
 	}
 }
 
+func TestAIProxy_GenerateTitle_Success(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body chatCompletionRequest
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		// Title request must be text-only (string content, not []messagePart)
+		if _, ok := body.Messages[1].Content.(string); !ok {
+			http.Error(w, "expected string content", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(chatCompletionResponse{
+			Choices: []chatCompletionChoice{
+				{Message: responseMsg{Content: "My Generated Title"}},
+			},
+		})
+	}))
+	defer ts.Close()
+
+	c := New(config.AIProxySettings{BaseURL: ts.URL, Model: "gpt-5"})
+	title, err := c.GenerateTitle(context.Background(), "# Some markdown content")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if title != "My Generated Title" {
+		t.Fatalf("unexpected title: %q", title)
+	}
+}
+
+func TestAIProxy_GenerateTitle_StripsSurroundingQuotes(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(chatCompletionResponse{
+			Choices: []chatCompletionChoice{
+				{Message: responseMsg{Content: `"Quoted Title"`}},
+			},
+		})
+	}))
+	defer ts.Close()
+
+	c := New(config.AIProxySettings{BaseURL: ts.URL, Model: "gpt-5"})
+	title, err := c.GenerateTitle(context.Background(), "some markdown")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if title != "Quoted Title" {
+		t.Fatalf("quotes not stripped: %q", title)
+	}
+}
+
+func TestAIProxy_GenerateTitle_EmptyCompletion(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(chatCompletionResponse{Choices: []chatCompletionChoice{}})
+	}))
+	defer ts.Close()
+
+	c := New(config.AIProxySettings{BaseURL: ts.URL, Model: "gpt-5"})
+	_, err := c.GenerateTitle(context.Background(), "some markdown")
+	if err == nil {
+		t.Fatal("expected error for empty choices")
+	}
+}
+
+func TestAIProxy_GenerateTitle_Non200(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	c := New(config.AIProxySettings{BaseURL: ts.URL, Model: "gpt-5"})
+	_, err := c.GenerateTitle(context.Background(), "some markdown")
+	if err == nil {
+		t.Fatal("expected error for non-200 response")
+	}
+}
+
 func TestAIProxy_TranscribeImage_ContextCancel(t *testing.T) {
 	var started int32
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

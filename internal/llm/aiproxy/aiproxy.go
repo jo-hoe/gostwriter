@@ -24,7 +24,14 @@ var defaultSystemPrompt string
 //go:embed default_instructions.txt
 var defaultInstructions string
 
+//go:embed title_system_prompt.txt
+var defaultTitleSystemPrompt string
+
+//go:embed title_instructions.txt
+var defaultTitleInstructions string
+
 var _ llm.Client = (*Client)(nil)
+var _ llm.TitleGenerator = (*Client)(nil)
 
 const (
 	// Headers
@@ -111,7 +118,44 @@ func (c *Client) TranscribeImage(ctx context.Context, r io.Reader, mime string) 
 
 	dataURL := buildDataURL(mime, imgData)
 	reqBody := c.buildRequestBody(dataURL)
+	return c.doCompletion(ctx, reqBody)
+}
 
+// GenerateTitle satisfies llm.TitleGenerator.
+func (c *Client) GenerateTitle(ctx context.Context, markdown string) (string, error) {
+	sys := strings.TrimSpace(defaultTitleSystemPrompt)
+	instr := strings.TrimSpace(defaultTitleInstructions)
+
+	msgs := []chatMessage{
+		{Role: RoleSystem, Content: sys},
+		{Role: RoleUser, Content: instr + "\n\n" + markdown},
+	}
+	reqBody := chatCompletionRequest{
+		Model:    c.model,
+		Messages: msgs,
+		Stream:   false,
+	}
+	if c.temperature != nil {
+		reqBody.Temperature = c.temperature
+	}
+	// Use a small token budget for titles; respect user override when set.
+	if c.maxTokens != nil {
+		reqBody.MaxTokens = c.maxTokens
+	} else {
+		n := 64
+		reqBody.MaxTokens = &n
+	}
+	title, err := c.doCompletion(ctx, reqBody)
+	if err != nil {
+		return "", err
+	}
+	// Strip surrounding quotes the model sometimes adds.
+	title = strings.Trim(strings.TrimSpace(title), `"'`)
+	return strings.TrimSpace(title), nil
+}
+
+// doCompletion executes a chat completions request and returns the first choice content.
+func (c *Client) doCompletion(ctx context.Context, reqBody chatCompletionRequest) (string, error) {
 	u, err := url.JoinPath(c.baseURL, endpointChatCompletions)
 	if err != nil {
 		return "", fmt.Errorf("join url: %w", err)

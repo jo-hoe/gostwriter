@@ -51,5 +51,13 @@ target:
     authorEmail: "bot@example.com"
     # Optional: override the GitHub API base URL (e.g., for GitHub Enterprise)
     apiBaseUrl: "https://api.github.com"
+    # If true and the caller did not supply a title, the LLM generates one from
+    # the transcription. The generated title is used as the Markdown H1 heading
+    # and as SuggestedTitle for file naming.
+    generateTitle: false
+    # Naming strategy: "template" uses filenameTemplate (default behaviour).
+    # "title" uses the slugified SuggestedTitle as the filename base, with
+    # automatic collision avoidance (appends -1, -2, … until a free name is found).
+    namingStrategy: "template"
     auth:
       token: "${GITHUB_TOKEN}"

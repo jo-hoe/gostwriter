@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -14,6 +16,7 @@ import (
 	"github.com/jo-hoe/gostwriter/internal/llm"
 	"github.com/jo-hoe/gostwriter/internal/llm/aiproxy"
 	"github.com/jo-hoe/gostwriter/internal/llm/mock"
+	"github.com/jo-hoe/gostwriter/internal/naming"
 	"github.com/jo-hoe/gostwriter/internal/processor"
 	"github.com/jo-hoe/gostwriter/internal/server"
 	"github.com/jo-hoe/gostwriter/internal/storage"
@@ -32,6 +35,35 @@ func parseLogLevel(s string) slog.Level {
 	default:
 		return slog.LevelInfo
 	}
+}
+
+func buildFileNamer(cfg appcfg.GitHubTargetConfig, httpClient *http.Client) (naming.FileNamer, error) {
+	const defaultTpl = `{{ .Timestamp.Format "20060102-150405" }}-{{ .JobID }}.md`
+
+	var base naming.FileNamer
+	switch cfg.NamingStrategy {
+	case "title":
+		base = naming.NewTitleNamer(cfg.BasePath, ".md")
+	default: // "template"
+		var err error
+		base, err = naming.NewTemplateNamer(cfg.FilenameTemplate, defaultTpl, cfg.BasePath)
+		if err != nil {
+			return nil, fmt.Errorf("build template namer: %w", err)
+		}
+	}
+
+	if cfg.NamingStrategy == "title" {
+		checker := naming.NewGitHubPathChecker(
+			httpClient,
+			cfg.APIBaseURL,
+			cfg.RepositoryOwner,
+			cfg.RepositoryName,
+			cfg.Branch,
+			cfg.Auth.Token,
+		)
+		return naming.NewCollisionNamer(base, checker, 0), nil
+	}
+	return base, nil
 }
 
 func main() {
@@ -65,7 +97,12 @@ func main() {
 	// Target (single)
 	reg := targets.NewRegistry()
 	if cfg.Target.GitHub.Enabled {
-		t, err := githubTarget.New("github", cfg.Target.GitHub)
+		namer, err := buildFileNamer(cfg.Target.GitHub, http.DefaultClient)
+		if err != nil {
+			logger.Error("build file namer", "err", err)
+			os.Exit(1)
+		}
+		t, err := githubTarget.New("github", cfg.Target.GitHub, namer)
 		if err != nil {
 			logger.Error("init github target", "err", err)
 			os.Exit(1)
