@@ -1,6 +1,6 @@
 # Multi-stage build for gostwriter
 # Stage 1: build the Go binary
-FROM golang:1.26-alpine3.23 AS builder
+FROM golang:1.27-alpine3.23 AS builder
 
 # Install git for modules if needed (and reproducibility)
 RUN apk add --no-cache git
