@@ -41,6 +41,7 @@ data:
         instructions: {{ .Values.llm.aiproxy.instructions | quote }}
         temperature: {{ .Values.llm.aiproxy.temperature }}
         maxTokens: {{ .Values.llm.aiproxy.maxTokens }}
+        timeout: {{ .Values.llm.aiproxy.timeout }}
     target:
       github:
         enabled: {{ .Values.target.github.enabled }}
@@ -53,6 +54,11 @@ data:
         authorName: {{ .Values.target.github.authorName | quote }}
         authorEmail: {{ .Values.target.github.authorEmail | quote }}
         apiBaseUrl: {{ .Values.target.github.apiBaseUrl | quote }}
+        generateTitle: {{ .Values.target.github.generateTitle }}
+        namingStrategy: {{ .Values.target.github.namingStrategy | quote }}
+        archive:
+          enabled: {{ .Values.target.github.archive.enabled }}
+          path: {{ .Values.target.github.archive.path | quote }}
         auth:
           token: {{ .Values.target.github.auth.token | quote }}
     {{- end }}

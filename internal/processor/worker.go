@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/jo-hoe/gostwriter/internal/common"
@@ -57,7 +59,13 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 	}
 	defer func() { _ = f.Close() }()
 
-	md, err := w.LLM.TranscribeImage(ctx, f, job.MimeType)
+	data, err := io.ReadAll(f)
+	if err != nil {
+		w.finishWithError(job.ID, fmt.Errorf("read image: %w", err))
+		return err
+	}
+
+	md, err := w.LLM.TranscribeImage(ctx, bytes.NewReader(data), job.MimeType)
 	if err != nil {
 		w.finishWithError(job.ID, fmt.Errorf("llm transcribe: %w", err))
 		return err
@@ -108,6 +116,14 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 		SuggestedTitle: effectiveTitle,
 		Metadata:       job.Metadata,
 		Timestamp:      time.Now().UTC(),
+	}
+
+	if w.Cfg.Target.GitHub.Archive.Enabled {
+		req.Original = &targets.OriginalDocument{
+			Content:   data,
+			Extension: filepath.Ext(job.ImagePath),
+			MimeType:  job.MimeType,
+		}
 	}
 
 	res, err := t.Post(ctx, req)

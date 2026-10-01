@@ -220,3 +220,75 @@ func TestLoad_NamingStrategyValidation(t *testing.T) {
 		t.Fatalf("error should mention namingStrategy, got: %v", err)
 	}
 }
+
+func TestLoad_ArchiveDisabledByDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(makeMinimalGitHubYAML(dir, "")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Target.GitHub.Archive.Enabled {
+		t.Fatal("archive should be disabled by default")
+	}
+}
+
+func TestLoad_ArchiveEnabledDefaultsPath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	extra := `    archive:
+      enabled: true
+`
+	if err := os.WriteFile(path, []byte(makeMinimalGitHubYAML(dir, extra)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Target.GitHub.Archive.Path != "originals/" {
+		t.Fatalf("expected default archive path originals/, got %q", cfg.Target.GitHub.Archive.Path)
+	}
+}
+
+func TestLoad_ArchivePathNormalized(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	extra := `    archive:
+      enabled: true
+      path: "docs"
+`
+	if err := os.WriteFile(path, []byte(makeMinimalGitHubYAML(dir, extra)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Target.GitHub.Archive.Path != "docs/" {
+		t.Fatalf("expected normalized archive path docs/, got %q", cfg.Target.GitHub.Archive.Path)
+	}
+}
+
+func TestLoad_ArchivePathEqualsBasePathRejected(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	extra := `    basePath: "inbox/"
+    archive:
+      enabled: true
+      path: "inbox/"
+`
+	if err := os.WriteFile(path, []byte(makeMinimalGitHubYAML(dir, extra)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error when archive.path equals basePath")
+	}
+	if !strings.Contains(err.Error(), "archive.path") {
+		t.Fatalf("error should mention archive.path, got: %v", err)
+	}
+}

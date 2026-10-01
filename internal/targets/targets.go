@@ -21,6 +21,16 @@ type TargetRequest struct {
 	FilenameTemplate string
 	CommitTemplate   string
 	BasePath         string
+	// Original, when non-nil, is the source document to archive alongside the
+	// transcription. Targets that do not support archiving ignore it.
+	Original *OriginalDocument
+}
+
+// OriginalDocument is the source upload to be archived in the target.
+type OriginalDocument struct {
+	Content   []byte
+	Extension string // leading dot, e.g. ".pdf", ".png"
+	MimeType  string
 }
 
 // TargetResult describes where the content landed.

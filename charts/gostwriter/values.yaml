@@ -189,6 +189,13 @@ target:
     # -- "title" uses the slugified SuggestedTitle as the filename base,
     # -- with automatic collision avoidance (appends -1, -2, … as needed).
     namingStrategy: "template"
+    # -- Archive the original uploaded document into the repository alongside
+    # -- the transcription, and add a relative Markdown link to it. Off by default.
+    archive:
+      # -- Enable archiving of the original document
+      enabled: false
+      # -- Repository sub-path where originals are committed
+      path: "originals/"
     auth:
       # -- Personal access token for GitHub REST API
       token: ""

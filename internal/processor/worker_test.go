@@ -392,3 +392,68 @@ func TestWorker_TitleGenerationFailureIsNonFatal(t *testing.T) {
 		t.Fatalf("expected completed, got %q", got.Stage)
 	}
 }
+
+func makeWorkerWithArchive(t *testing.T, llmClient *llmMock, archive bool) (*Worker, *capturingTarget, jobs.Store) {
+	t.Helper()
+	store := newMemStore()
+	tgt := &capturingTarget{name: "github"}
+	reg := targets.NewRegistry()
+	reg.Add(tgt)
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			CallbackRetries: 1,
+			CallbackBackoff: 10 * time.Millisecond,
+			StorageDir:      t.TempDir(),
+			MaxUploadSize:   config.ByteSize(10 * 1024 * 1024),
+		},
+		Target: config.TargetsConfig{
+			GitHub: config.GitHubTargetConfig{
+				Enabled: true,
+				Archive: config.ArchiveConfig{Enabled: archive, Path: "originals/"},
+			},
+		},
+	}
+	return New(discardLogger(), cfg, store, llmClient, reg), tgt, store
+}
+
+func TestWorker_PopulatesOriginal_WhenArchiveEnabled(t *testing.T) {
+	llmClient := &llmMock{out: "body text"}
+	worker, tgt, store := makeWorkerWithArchive(t, llmClient, true)
+
+	job := jobs.Job{
+		ID: "ja", ImagePath: makeTempImage(t), MimeType: common.MimeImagePNG,
+		TargetName: "github", Stage: jobs.StageQueued, CreatedAt: time.Now().UTC(),
+	}
+	_ = store.CreateJob(&job)
+
+	if err := worker.Process(context.Background(), jobs.WorkItem{Job: job}); err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	if tgt.lastReq.Original == nil {
+		t.Fatal("expected Original to be populated when archive enabled")
+	}
+	if tgt.lastReq.Original.Extension != ".png" {
+		t.Fatalf("expected .png extension, got %q", tgt.lastReq.Original.Extension)
+	}
+	if string(tgt.lastReq.Original.Content) != "fakeimg" {
+		t.Fatalf("original content mismatch: %q", tgt.lastReq.Original.Content)
+	}
+}
+
+func TestWorker_OriginalNil_WhenArchiveDisabled(t *testing.T) {
+	llmClient := &llmMock{out: "body text"}
+	worker, tgt, store := makeWorkerWithArchive(t, llmClient, false)
+
+	job := jobs.Job{
+		ID: "jb", ImagePath: makeTempImage(t), MimeType: common.MimeImagePNG,
+		TargetName: "github", Stage: jobs.StageQueued, CreatedAt: time.Now().UTC(),
+	}
+	_ = store.CreateJob(&job)
+
+	if err := worker.Process(context.Background(), jobs.WorkItem{Job: job}); err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	if tgt.lastReq.Original != nil {
+		t.Fatal("expected Original to be nil when archive disabled")
+	}
+}

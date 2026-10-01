@@ -86,6 +86,16 @@ type GitHubTargetConfig struct {
 	// NamingStrategy selects the FileNamer implementation.
 	// Valid values: "template" (default), "title"
 	NamingStrategy string `yaml:"namingStrategy"`
+	// Archive, when enabled, commits the original uploaded document to the
+	// repository alongside the transcription and links to it from the Markdown.
+	Archive ArchiveConfig `yaml:"archive"`
+}
+
+// ArchiveConfig controls archiving of the original uploaded document into the
+// target repository.
+type ArchiveConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Path    string `yaml:"path"` // repository sub-path for originals, e.g. "originals/"
 }
 
 // GitHubAuthConfig holds token-based auth (Personal Access Token).
@@ -280,6 +290,12 @@ func postProcessTargets(cfg *Config) error {
 		if strings.TrimSpace(cfg.Target.GitHub.NamingStrategy) == "" {
 			cfg.Target.GitHub.NamingStrategy = "template"
 		}
+		if cfg.Target.GitHub.Archive.Enabled {
+			if strings.TrimSpace(cfg.Target.GitHub.Archive.Path) == "" {
+				cfg.Target.GitHub.Archive.Path = "originals/"
+			}
+			cfg.Target.GitHub.Archive.Path = normalizePathPrefix(cfg.Target.GitHub.Archive.Path)
+		}
 	}
 	return nil
 }
@@ -316,6 +332,14 @@ func validate(cfg *Config) error {
 			// valid
 		default:
 			return fmt.Errorf("github.namingStrategy must be \"template\" or \"title\", got %q", g.NamingStrategy)
+		}
+		if g.Archive.Enabled {
+			if strings.TrimSpace(g.Archive.Path) == "" {
+				return fmt.Errorf("github.archive.path is required when archive is enabled")
+			}
+			if g.Archive.Path == g.BasePath {
+				return fmt.Errorf("github.archive.path must differ from github.basePath")
+			}
 		}
 	}
 	return nil
