@@ -31,9 +31,10 @@ const (
 
 // MIME types
 const (
-	MimeImagePNG  = "image/png"
-	MimeImageJPEG = "image/jpeg"
-	MimeImageJPG  = "image/jpg"
+	MimeImagePNG       = "image/png"
+	MimeImageJPEG      = "image/jpeg"
+	MimeImageJPG       = "image/jpg"
+	MimeApplicationPDF = "application/pdf"
 )
 
 // Subdirectory names

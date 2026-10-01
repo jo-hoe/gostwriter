@@ -54,6 +54,9 @@ const (
 	// Data URL constants
 	dataURLPrefix    = "data:"
 	dataURLBase64Sep = ";base64,"
+
+	// Filename sent for PDF file parts (OpenAI-compatible "file" content part).
+	pdfPartFilename = "document.pdf"
 )
 
 // Role represents the sender role for a chat message.
@@ -71,6 +74,7 @@ type PartType string
 const (
 	PartText     PartType = "text"
 	PartImageURL PartType = "image_url"
+	PartFile     PartType = "file"
 )
 
 // Client implements llm.Client by calling an OpenAI-compatible AI Proxy.
@@ -106,19 +110,36 @@ func newHTTPClient(timeout time.Duration) *http.Client {
 	return &http.Client{Timeout: timeout}
 }
 
-// TranscribeImage sends a chat completion request instructing the model to transcribe the image into Markdown.
+// TranscribeImage sends a chat completion request instructing the model to transcribe the document into Markdown.
+// Images are sent as an "image_url" content part; PDFs are sent as a "file" content part.
 func (c *Client) TranscribeImage(ctx context.Context, r io.Reader, mime string) (string, error) {
-	imgData, err := io.ReadAll(r)
+	data, err := io.ReadAll(r)
 	if err != nil {
-		return "", fmt.Errorf("read image: %w", err)
+		return "", fmt.Errorf("read document: %w", err)
 	}
-	if len(imgData) == 0 {
-		return "", fmt.Errorf("image is empty")
+	if len(data) == 0 {
+		return "", fmt.Errorf("document is empty")
 	}
 
-	dataURL := buildDataURL(mime, imgData)
-	reqBody := c.buildRequestBody(dataURL)
+	part := buildDocumentPart(mime, data)
+	reqBody := c.buildRequestBody(part)
 	return c.doCompletion(ctx, reqBody)
+}
+
+// buildDocumentPart returns the user content part for the given document, selecting
+// the "file" part for PDFs and the "image_url" part for everything else.
+func buildDocumentPart(mime string, data []byte) messagePart {
+	dataURL := buildDataURL(mime, data)
+	if strings.EqualFold(strings.TrimSpace(mime), common.MimeApplicationPDF) {
+		return messagePart{
+			Type: PartFile,
+			File: &filePart{Filename: pdfPartFilename, FileData: dataURL},
+		}
+	}
+	return messagePart{
+		Type:     PartImageURL,
+		ImageURL: &imageURL{URL: dataURL},
+	}
 }
 
 // GenerateTitle satisfies llm.TitleGenerator.
@@ -199,7 +220,7 @@ func (c *Client) doCompletion(ctx context.Context, reqBody chatCompletionRequest
 	return comp.Choices[0].Message.Content, nil
 }
 
-func (c *Client) buildRequestBody(imageDataURL string) chatCompletionRequest {
+func (c *Client) buildRequestBody(userPart messagePart) chatCompletionRequest {
 	sys := strings.TrimSpace(c.system)
 	if sys == "" {
 		sys = defaultSystemPrompt
@@ -218,7 +239,7 @@ func (c *Client) buildRequestBody(imageDataURL string) chatCompletionRequest {
 			Role: RoleUser,
 			Content: []messagePart{
 				{Type: PartText, Text: &instructions},
-				{Type: PartImageURL, ImageURL: &imageURL{URL: imageDataURL}},
+				userPart,
 			},
 		},
 	}
@@ -286,14 +307,20 @@ type chatMessage struct {
 }
 
 type messagePart struct {
-	Type     PartType  `json:"type"`                // "text" | "image_url"
+	Type     PartType  `json:"type"`                // "text" | "image_url" | "file"
 	Text     *string   `json:"text,omitempty"`      // when Type == "text"
 	ImageURL *imageURL `json:"image_url,omitempty"` // when Type == "image_url"
+	File     *filePart `json:"file,omitempty"`      // when Type == "file"
 }
 
 type imageURL struct {
 	URL    string  `json:"url"`
 	Detail *string `json:"detail,omitempty"`
+}
+
+type filePart struct {
+	Filename string `json:"filename"`
+	FileData string `json:"file_data"`
 }
 
 type chatCompletionResponse struct {

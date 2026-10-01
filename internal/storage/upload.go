@@ -20,10 +20,11 @@ type Uploader struct {
 	baseDir string
 }
 
-var allowedImageMimes = map[string]string{
-	common.MimeImagePNG:  ".png",
-	common.MimeImageJPEG: ".jpg",
-	common.MimeImageJPG:  ".jpg",
+var allowedUploadMimes = map[string]string{
+	common.MimeImagePNG:       ".png",
+	common.MimeImageJPEG:      ".jpg",
+	common.MimeImageJPG:       ".jpg",
+	common.MimeApplicationPDF: ".pdf",
 }
 
 // NewUploader creates an uploader that stores to baseDir/uploads.
@@ -31,7 +32,7 @@ func NewUploader(baseDir string) *Uploader {
 	return &Uploader{baseDir: filepath.Join(baseDir, common.UploadsDirName)}
 }
 
-// SaveMultipartImage validates and stores an uploaded image (png/jpg) to disk.
+// SaveMultipartImage validates and stores an uploaded document (png/jpg/pdf) to disk.
 // It returns the absolute file path and a cleanup function to delete the file.
 // The caller should always invoke the cleanup function when the file is no longer needed.
 func (u *Uploader) SaveMultipartImage(fileHeader *multipart.FileHeader, maxBytes int64) (string, func() error, string, error) {
@@ -45,7 +46,7 @@ func (u *Uploader) SaveMultipartImage(fileHeader *multipart.FileHeader, maxBytes
 		ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
 		mimeType = mime.TypeByExtension(ext)
 	}
-	if !isAllowedImageMime(mimeType) {
+	if !isAllowedUploadMime(mimeType) {
 		return "", nil, "", fmt.Errorf("unsupported content type: %s", mimeType)
 	}
 
@@ -89,15 +90,15 @@ func (u *Uploader) SaveMultipartImage(fileHeader *multipart.FileHeader, maxBytes
 	return cleanDst, cleanup, mimeType, nil
 }
 
-func isAllowedImageMime(mimeType string) bool {
+func isAllowedUploadMime(mimeType string) bool {
 	mt := strings.ToLower(strings.TrimSpace(mimeType))
-	_, ok := allowedImageMimes[mt]
+	_, ok := allowedUploadMimes[mt]
 	return ok
 }
 
 func pickExtension(mimeType, original string) string {
 	mt := strings.ToLower(strings.TrimSpace(mimeType))
-	if ext, ok := allowedImageMimes[mt]; ok {
+	if ext, ok := allowedUploadMimes[mt]; ok {
 		return ext
 	}
 	ext := strings.ToLower(filepath.Ext(original))

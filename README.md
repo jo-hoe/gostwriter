@@ -8,7 +8,7 @@ image-to-markdown transcription and posting service
 
 ## Overview
 
-Gostwriter provides an HTTP API to accept image uploads (PNG/JPEG), transcribe them to Markdown via a pluggable LLM client and post the resulting Markdown to a configured target.
+Gostwriter provides an HTTP API to accept document uploads (PNG/JPEG/PDF), transcribe them to Markdown via a pluggable LLM client and post the resulting Markdown to a configured target.
 By default, requests are processed synchronously and return `200 OK` with the result.
 If the client sends `Prefer: respond-async`, the request is processed asynchronously and returns `202` with a `job_id` for status polling.
 
@@ -117,7 +117,7 @@ curl "http://localhost:8080/v1/transcriptions/abcd-1234"
 
 Notes:
 
-- Required form field: `file` (PNG/JPEG)
+- Required form field: `file` (PNG/JPEG/PDF)
 - Optional fields: `title`, `metadata` (JSON object string), `callback_url` (HTTP(s) URL)
 - Targets are fixed by server configuration; requests cannot override the target
 - Max upload size defaults to 10 MiB (configurable)

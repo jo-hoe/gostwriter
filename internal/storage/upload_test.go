@@ -98,6 +98,56 @@ func TestUploader_SaveMultipartImage_JPEG_ByExtension(t *testing.T) {
 	}
 }
 
+func TestUploader_SaveMultipartImage_PDF(t *testing.T) {
+	tmp := t.TempDir()
+	up := NewUploader(tmp)
+
+	_, fh := makeMultipartFile(t, "scan.pdf", "application/pdf", []byte("%PDF-1.7"))
+	path, cleanup, mime, err := up.SaveMultipartImage(fh, 10*1024*1024)
+	if err != nil {
+		t.Fatalf("SaveMultipartImage: %v", err)
+	}
+	defer func() {
+		if cleanup != nil {
+			_ = cleanup()
+		}
+	}()
+
+	if mime != "application/pdf" {
+		t.Fatalf("mime = %q", mime)
+	}
+	if filepath.Ext(path) != ".pdf" {
+		t.Fatalf("expected .pdf extension, got %q", path)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("saved file not found: %v", err)
+	}
+}
+
+func TestUploader_SaveMultipartImage_PDF_ByExtension(t *testing.T) {
+	tmp := t.TempDir()
+	up := NewUploader(tmp)
+
+	// Clients that send application/octet-stream fall back to extension detection.
+	_, fh := makeMultipartFile(t, "scan.pdf", "application/octet-stream", []byte("%PDF-1.7"))
+	path, cleanup, mime, err := up.SaveMultipartImage(fh, 10*1024*1024)
+	if err != nil {
+		t.Fatalf("SaveMultipartImage: %v", err)
+	}
+	defer func() {
+		if cleanup != nil {
+			_ = cleanup()
+		}
+	}()
+
+	if mime != "application/pdf" {
+		t.Fatalf("mime = %q", mime)
+	}
+	if filepath.Ext(path) != ".pdf" {
+		t.Fatalf("expected .pdf extension, got %q", path)
+	}
+}
+
 func TestUploader_SaveMultipartImage_RejectsUnsupported(t *testing.T) {
 	tmp := t.TempDir()
 	up := NewUploader(tmp)
