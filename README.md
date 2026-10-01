@@ -3,6 +3,8 @@
 [![Test Status](https://github.com/jo-hoe/gostwriter/workflows/test/badge.svg)](https://github.com/jo-hoe/gostwriter/actions?workflow=test)
 [![Lint Status](https://github.com/jo-hoe/gostwriter/workflows/lint/badge.svg)](https://github.com/jo-hoe/gostwriter/actions?workflow=lint)
 [![Coverage Status](https://coveralls.io/repos/github/jo-hoe/gostwriter/badge.svg?branch=main)](https://coveralls.io/github/jo-hoe/gostwriter?branch=main)
+[![Chart Version](https://img.shields.io/github/v/release/jo-hoe/gostwriter?filter=gostwriter-*&label=chart)](https://jo-hoe.github.io/gostwriter)
+[![Image Version](https://img.shields.io/github/v/release/jo-hoe/gostwriter?filter=v*&label=image)](https://github.com/jo-hoe/gostwriter/pkgs/container/gostwriter)
 
 image-to-markdown transcription and posting service
 

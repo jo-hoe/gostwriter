@@ -1,6 +1,6 @@
 # gostwriter
 
-![Version: 0.2.0](https://img.shields.io/badge/Version-0.2.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.0](https://img.shields.io/badge/AppVersion-0.2.0-informational?style=flat-square)
+[![Chart Version](https://img.shields.io/github/v/release/jo-hoe/gostwriter?filter=gostwriter-*&label=chart)](https://jo-hoe.github.io/gostwriter) [![App Version](https://img.shields.io/github/v/release/jo-hoe/gostwriter?filter=v*&label=app)](https://github.com/jo-hoe/gostwriter/pkgs/container/gostwriter) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)
 
 Helm chart for deploying Gostwriter
 
@@ -80,9 +80,12 @@ Helm chart for deploying Gostwriter
 | serviceAccount.automount | bool | `true` | Automatically mount a ServiceAccount's API credentials |
 | serviceAccount.create | bool | `true` | Specifies whether a service account should be created |
 | serviceAccount.name | string | `""` | The name of the service account to use. If not set and create is true, a name is generated using the fullname template |
-| target | object | `{"github":{"apiBaseUrl":"https://api.github.com","auth":{"token":""},"authorEmail":"bot@example.com","authorName":"Gostwriter Bot","basePath":"inbox/","branch":"main","commitMessageTemplate":"Add transcription {{ .JobID }}","enabled":true,"filenameTemplate":"{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md","repositoryName":"yourrepo","repositoryOwner":"yourorg"}}` | Single target configuration (GitHub via REST API) IMPORTANT: For Kubernetes, do NOT use env expansion inside the config. Provide the token directly inside a Secret-backed config.yaml (via configRaw or existingConfigSecret). |
-| target.github | object | `{"apiBaseUrl":"https://api.github.com","auth":{"token":""},"authorEmail":"bot@example.com","authorName":"Gostwriter Bot","basePath":"inbox/","branch":"main","commitMessageTemplate":"Add transcription {{ .JobID }}","enabled":true,"filenameTemplate":"{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md","repositoryName":"yourrepo","repositoryOwner":"yourorg"}` | GitHub target configuration (REST API) |
+| target | object | `{"github":{"apiBaseUrl":"https://api.github.com","archive":{"enabled":false,"path":"originals/"},"auth":{"token":""},"authorEmail":"bot@example.com","authorName":"Gostwriter Bot","basePath":"inbox/","branch":"main","commitMessageTemplate":"Add transcription {{ .JobID }}","enabled":true,"filenameTemplate":"{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md","generateTitle":false,"namingStrategy":"template","repositoryName":"yourrepo","repositoryOwner":"yourorg"}}` | Single target configuration (GitHub via REST API) IMPORTANT: For Kubernetes, do NOT use env expansion inside the config. Provide the token directly inside a Secret-backed config.yaml (via configRaw or existingConfigSecret). |
+| target.github | object | `{"apiBaseUrl":"https://api.github.com","archive":{"enabled":false,"path":"originals/"},"auth":{"token":""},"authorEmail":"bot@example.com","authorName":"Gostwriter Bot","basePath":"inbox/","branch":"main","commitMessageTemplate":"Add transcription {{ .JobID }}","enabled":true,"filenameTemplate":"{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md","generateTitle":false,"namingStrategy":"template","repositoryName":"yourrepo","repositoryOwner":"yourorg"}` | GitHub target configuration (REST API) |
 | target.github.apiBaseUrl | string | `"https://api.github.com"` | Optional override for the GitHub API base URL (e.g., for GH Enterprise) |
+| target.github.archive | object | `{"enabled":false,"path":"originals/"}` | the transcription, and add a relative Markdown link to it. Off by default. |
+| target.github.archive.enabled | bool | `false` | Enable archiving of the original document |
+| target.github.archive.path | string | `"originals/"` | Repository sub-path where originals are committed |
 | target.github.auth.token | string | `""` | Personal access token for GitHub REST API |
 | target.github.authorEmail | string | `"bot@example.com"` | Commit author email used for the commit metadata |
 | target.github.authorName | string | `"Gostwriter Bot"` | Commit author name used for the commit metadata |
@@ -91,8 +94,7 @@ Helm chart for deploying Gostwriter
 | target.github.commitMessageTemplate | string | `"Add transcription {{ .JobID }}"` | Go text/template for commit message |
 | target.github.enabled | bool | `true` | Enable/disable the GitHub target |
 | target.github.filenameTemplate | string | `"{{ .Timestamp.Format \"20060102-150405\" }}-{{ .JobID }}.md"` | Go text/template for filename; has .Timestamp, .JobID, etc. |
+| target.github.generateTitle | bool | `false` | heading and as SuggestedTitle for file naming. |
+| target.github.namingStrategy | string | `"template"` | with automatic collision avoidance (appends -1, -2, … as needed). |
 | target.github.repositoryOwner | string | `"yourorg"` | GitHub repository owner and name |
 | tolerations | list | `[]` | Tolerations for Pod assignment |
-
-----------------------------------------------
-Autogenerated from chart metadata using [helm-docs v1.14.2](https://github.com/norwoodj/helm-docs/releases/v1.14.2)
