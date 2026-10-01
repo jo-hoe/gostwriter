@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -87,6 +88,79 @@ func TestAIProxy_TranscribeImage_Success(t *testing.T) {
 	first, ok := userParts[0].(map[string]any)
 	if !ok || first["type"] != "text" || first["text"] != "User Instructions" {
 		t.Fatalf("first user part not text instructions: %#v", first)
+	}
+}
+
+// captureUserParts runs TranscribeImage against a stub server and returns the
+// user message content parts (each a map[string]any) as decoded from the request.
+func captureUserParts(t *testing.T, mime string, data []byte) []any {
+	t.Helper()
+	var seenBody chatCompletionRequest
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&seenBody); err != nil {
+			http.Error(w, "bad json", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(chatCompletionResponse{
+			Choices: []chatCompletionChoice{{Message: responseMsg{Content: "ok"}}},
+		})
+	}))
+	defer ts.Close()
+
+	c := New(config.AIProxySettings{BaseURL: ts.URL, Model: "gpt-5"})
+	if _, err := c.TranscribeImage(context.Background(), bytes.NewReader(data), mime); err != nil {
+		t.Fatalf("TranscribeImage: %v", err)
+	}
+	parts, ok := seenBody.Messages[1].Content.([]any)
+	if !ok {
+		t.Fatalf("user content not array of parts: %#v", seenBody.Messages[1].Content)
+	}
+	return parts
+}
+
+func TestAIProxy_TranscribeImage_PNGUsesImageURLPart(t *testing.T) {
+	parts := captureUserParts(t, "image/png", []byte("pngbytes"))
+	if len(parts) != 2 {
+		t.Fatalf("expected 2 parts (text + image), got %d", len(parts))
+	}
+	img, ok := parts[1].(map[string]any)
+	if !ok || img["type"] != "image_url" {
+		t.Fatalf("second part should be image_url: %#v", parts[1])
+	}
+	urlObj, ok := img["image_url"].(map[string]any)
+	if !ok {
+		t.Fatalf("image_url object missing: %#v", img)
+	}
+	url, _ := urlObj["url"].(string)
+	if !strings.HasPrefix(url, "data:image/png;base64,") {
+		t.Fatalf("image_url url prefix mismatch: %q", url)
+	}
+}
+
+func TestAIProxy_TranscribeImage_PDFUsesFilePart(t *testing.T) {
+	parts := captureUserParts(t, "application/pdf", []byte("%PDF-1.7"))
+	if len(parts) != 2 {
+		t.Fatalf("expected 2 parts (text + file), got %d", len(parts))
+	}
+	fp, ok := parts[1].(map[string]any)
+	if !ok || fp["type"] != "file" {
+		t.Fatalf("second part should be file: %#v", parts[1])
+	}
+	fileObj, ok := fp["file"].(map[string]any)
+	if !ok {
+		t.Fatalf("file object missing: %#v", fp)
+	}
+	if fileObj["filename"] != "document.pdf" {
+		t.Fatalf("filename mismatch: %#v", fileObj["filename"])
+	}
+	fileData, _ := fileObj["file_data"].(string)
+	if !strings.HasPrefix(fileData, "data:application/pdf;base64,") {
+		t.Fatalf("file_data prefix mismatch: %q", fileData)
+	}
+	// A PDF must not also carry an image_url part.
+	if _, has := fp["image_url"]; has {
+		t.Fatalf("pdf file part should not include image_url: %#v", fp)
 	}
 }
 
