@@ -2,7 +2,6 @@
 
 [![Test Status](https://github.com/jo-hoe/gostwriter/workflows/test/badge.svg)](https://github.com/jo-hoe/gostwriter/actions?workflow=test)
 [![Lint Status](https://github.com/jo-hoe/gostwriter/workflows/lint/badge.svg)](https://github.com/jo-hoe/gostwriter/actions?workflow=lint)
-[![Go Report Card](https://goreportcard.com/badge/github.com/jo-hoe/gostwriter)](https://goreportcard.com/report/github.com/jo-hoe/gostwriter)
 [![Coverage Status](https://coveralls.io/repos/github/jo-hoe/gostwriter/badge.svg?branch=main)](https://coveralls.io/github/jo-hoe/gostwriter?branch=main)
 
 image-to-markdown transcription and posting service
