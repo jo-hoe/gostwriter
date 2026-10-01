@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -241,5 +242,181 @@ func TestPost_CollisionNamerContextPropagated(t *testing.T) {
 	lastPath := requestPaths[len(requestPaths)-1]
 	if !strings.HasSuffix(lastPath, "note-1.md") {
 		t.Fatalf("expected PUT to suffixed path, got: %s", lastPath)
+	}
+}
+
+type recordedPut struct {
+	Path string
+	Body map[string]any
+}
+
+// newArchiveServer records every PUT and returns a success response.
+func newArchiveServer(puts *[]recordedPut) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			var body map[string]any
+			defer func() { _ = r.Body.Close() }()
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			*puts = append(*puts, recordedPut{Path: r.URL.Path, Body: body})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"content": map[string]any{"path": "x"},
+			"commit":  map[string]any{"sha": "sha-1"},
+		})
+	}))
+}
+
+func decodeContent(t *testing.T, p recordedPut) string {
+	t.Helper()
+	enc, _ := p.Body["content"].(string)
+	raw, err := base64.StdEncoding.DecodeString(enc)
+	if err != nil {
+		t.Fatalf("decode base64 content: %v", err)
+	}
+	return string(raw)
+}
+
+func archiveTestConfig(apiBaseURL string, archive bool) appcfg.GitHubTargetConfig {
+	return appcfg.GitHubTargetConfig{
+		RepositoryOwner:       "org",
+		RepositoryName:        "repo",
+		Branch:                "main",
+		BasePath:              "inbox/",
+		FilenameTemplate:      "{{ .JobID }}.md",
+		CommitMessageTemplate: "Add {{ .JobID }}",
+		APIBaseURL:            apiBaseURL,
+		Auth:                  appcfg.GitHubAuthConfig{Token: "tok"},
+		Archive:               appcfg.ArchiveConfig{Enabled: archive, Path: "originals/"},
+	}
+}
+
+func TestPost_ArchiveTwoCommits(t *testing.T) {
+	var puts []recordedPut
+	srv := newArchiveServer(&puts)
+	defer srv.Close()
+
+	tg := newTestTarget(t, archiveTestConfig(srv.URL, true), nil)
+	tg.WithHTTPClient(srv.Client())
+
+	original := []byte("%PDF-1.4 fake pdf bytes")
+	res, err := tg.Post(context.Background(), targets.TargetRequest{
+		JobID:     "job-xyz",
+		Markdown:  "# Title\n\nbody text",
+		Timestamp: time.Now().UTC(),
+		Original:  &targets.OriginalDocument{Content: original, Extension: ".pdf", MimeType: "application/pdf"},
+	})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+
+	if len(puts) != 2 {
+		t.Fatalf("expected exactly 2 PUTs, got %d: %+v", len(puts), puts)
+	}
+	if !strings.HasSuffix(puts[0].Path, "/contents/originals/job-xyz.pdf") {
+		t.Fatalf("first PUT should be the original, got: %s", puts[0].Path)
+	}
+	if !strings.HasSuffix(puts[1].Path, "/contents/inbox/job-xyz.md") {
+		t.Fatalf("second PUT should be the transcription, got: %s", puts[1].Path)
+	}
+	if got := decodeContent(t, puts[0]); got != string(original) {
+		t.Fatalf("original content mismatch: %q", got)
+	}
+	md := decodeContent(t, puts[1])
+	if !strings.Contains(md, "> Original: [document](../originals/job-xyz.pdf)") {
+		t.Fatalf("markdown missing original link:\n%s", md)
+	}
+	if !strings.Contains(res.Location, "inbox/job-xyz.md") {
+		t.Fatalf("Location should point at the transcription, got: %s", res.Location)
+	}
+}
+
+func TestPost_ArchiveDisabled_SingleCommit(t *testing.T) {
+	var puts []recordedPut
+	srv := newArchiveServer(&puts)
+	defer srv.Close()
+
+	tg := newTestTarget(t, archiveTestConfig(srv.URL, false), nil)
+	tg.WithHTTPClient(srv.Client())
+
+	_, err := tg.Post(context.Background(), targets.TargetRequest{
+		JobID:     "job-xyz",
+		Markdown:  "# Title\n\nbody",
+		Timestamp: time.Now().UTC(),
+		Original:  &targets.OriginalDocument{Content: []byte("x"), Extension: ".png"},
+	})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+	if len(puts) != 1 {
+		t.Fatalf("expected 1 PUT when archive disabled, got %d", len(puts))
+	}
+	if strings.Contains(decodeContent(t, puts[0]), "> Original:") {
+		t.Fatalf("no link should be injected when archive disabled")
+	}
+}
+
+func TestPost_ArchiveEnabled_OriginalNil(t *testing.T) {
+	var puts []recordedPut
+	srv := newArchiveServer(&puts)
+	defer srv.Close()
+
+	tg := newTestTarget(t, archiveTestConfig(srv.URL, true), nil)
+	tg.WithHTTPClient(srv.Client())
+
+	_, err := tg.Post(context.Background(), targets.TargetRequest{
+		JobID:     "job-xyz",
+		Markdown:  "# Title\n\nbody",
+		Timestamp: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+	if len(puts) != 1 {
+		t.Fatalf("expected 1 PUT when Original is nil, got %d", len(puts))
+	}
+}
+
+func TestSwapDirExt(t *testing.T) {
+	cases := []struct {
+		repoPath, newDir, newExt, want string
+	}{
+		{"inbox/foo.md", "originals/", ".pdf", "originals/foo.pdf"},
+		{"inbox/2024-note.md", "archive/", ".png", "archive/2024-note.png"},
+		{"a/b/c/x.md", "orig/", ".jpg", "orig/x.jpg"},
+	}
+	for _, c := range cases {
+		if got := swapDirExt(c.repoPath, c.newDir, c.newExt); got != c.want {
+			t.Errorf("swapDirExt(%q,%q,%q)=%q want %q", c.repoPath, c.newDir, c.newExt, got, c.want)
+		}
+	}
+}
+
+func TestRelLink(t *testing.T) {
+	cases := []struct {
+		from, to, want string
+	}{
+		{"inbox/a.md", "originals/a.pdf", "../originals/a.pdf"},
+		{"a.md", "originals/a.pdf", "originals/a.pdf"},
+		{"inbox/a.md", "inbox/a.pdf", "a.pdf"},
+		{"x/y/a.md", "x/orig/a.pdf", "../orig/a.pdf"},
+		{"deep/nested/a.md", "originals/a.pdf", "../../originals/a.pdf"},
+	}
+	for _, c := range cases {
+		if got := relLink(c.from, c.to); got != c.want {
+			t.Errorf("relLink(%q,%q)=%q want %q", c.from, c.to, got, c.want)
+		}
+	}
+}
+
+func TestInjectOriginalLink(t *testing.T) {
+	withH1 := injectOriginalLink("# Title\n\nbody", "../originals/a.pdf")
+	if withH1 != "# Title\n\n> Original: [document](../originals/a.pdf)\n\nbody" {
+		t.Errorf("H1 case mismatch:\n%q", withH1)
+	}
+	noH1 := injectOriginalLink("just body", "../originals/a.pdf")
+	if noH1 != "> Original: [document](../originals/a.pdf)\n\njust body" {
+		t.Errorf("no-H1 case mismatch:\n%q", noH1)
 	}
 }
