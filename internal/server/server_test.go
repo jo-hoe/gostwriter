@@ -178,7 +178,7 @@ func TestCreateTranscription_Synchronous200(t *testing.T) {
 	}
 	server := NewHTTPServer(svc)
 
-	ctype, body := makeMultipart(t, "file", "img.png", "image/png", []byte("img"))
+	ctype, body := makeMultipart(t, "file", "img.png", "image/png", []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 'x'})
 	req := httptest.NewRequest(http.MethodPost, common.PathTranscriptions, body)
 	req.Header.Set("Content-Type", ctype)
 	// no Prefer header => synchronous
@@ -234,7 +234,7 @@ func TestCreateTranscription_Asynchronous202(t *testing.T) {
 	}
 	server := NewHTTPServer(svc)
 
-	ctype, body := makeMultipart(t, "file", "img.jpg", "image/jpeg", []byte("img"))
+	ctype, body := makeMultipart(t, "file", "img.jpg", "image/jpeg", []byte{0xFF, 0xD8, 0xFF, 0xE0, 'x'})
 	req := httptest.NewRequest(http.MethodPost, common.PathTranscriptions, body)
 	req.Header.Set("Content-Type", ctype)
 	req.Header.Set(common.HeaderPrefer, common.PreferRespondAsync)

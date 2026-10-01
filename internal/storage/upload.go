@@ -1,11 +1,12 @@
 package storage
 
 import (
+	"bufio"
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"io"
-	"mime"
 	"mime/multipart"
 	"os"
 	"path/filepath"
@@ -20,12 +21,25 @@ type Uploader struct {
 	baseDir string
 }
 
-var allowedUploadMimes = map[string]string{
-	common.MimeImagePNG:       ".png",
-	common.MimeImageJPEG:      ".jpg",
-	common.MimeImageJPG:       ".jpg",
-	common.MimeApplicationPDF: ".pdf",
+// signature maps a magic-number prefix to the canonical MIME type and file
+// extension it represents. The upload type is decided solely from the file
+// content; the client-declared Content-Type and filename are not trusted.
+type signature struct {
+	magic []byte
+	mime  string
+	ext   string
 }
+
+// signatures are checked in order; the first prefix match wins.
+var signatures = []signature{
+	{magic: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}, mime: common.MimeImagePNG, ext: ".png"},
+	{magic: []byte{0xFF, 0xD8, 0xFF}, mime: common.MimeImageJPEG, ext: ".jpg"},
+	{magic: []byte("%PDF-"), mime: common.MimeApplicationPDF, ext: ".pdf"},
+}
+
+// sniffLen is the number of leading bytes read to detect the file type. It must
+// be at least as long as the longest magic number in signatures.
+const sniffLen = 8
 
 // NewUploader creates an uploader that stores to baseDir/uploads.
 func NewUploader(baseDir string) *Uploader {
@@ -33,25 +47,15 @@ func NewUploader(baseDir string) *Uploader {
 }
 
 // SaveMultipartImage validates and stores an uploaded document (png/jpg/pdf) to disk.
-// It returns the absolute file path and a cleanup function to delete the file.
-// The caller should always invoke the cleanup function when the file is no longer needed.
+// The upload type is determined by sniffing the file content (magic numbers);
+// the client's Content-Type header and filename extension are ignored. Content
+// that does not match a supported signature is rejected.
+// It returns the absolute file path, a cleanup function to delete the file, and
+// the detected MIME type. The caller should always invoke the cleanup function
+// when the file is no longer needed.
 func (u *Uploader) SaveMultipartImage(fileHeader *multipart.FileHeader, maxBytes int64) (string, func() error, string, error) {
 	if fileHeader == nil {
 		return "", nil, "", fmt.Errorf("no file provided")
-	}
-	mimeType := fileHeader.Header.Get("Content-Type")
-	// Some clients set application/octet-stream for uploads; treat it as unknown and fall back to extension.
-	if mimeType == "" || strings.EqualFold(strings.TrimSpace(mimeType), "application/octet-stream") {
-		// Fallback: try to detect by extension
-		ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
-		mimeType = mime.TypeByExtension(ext)
-	}
-	if !isAllowedUploadMime(mimeType) {
-		return "", nil, "", fmt.Errorf("unsupported content type: %s", mimeType)
-	}
-
-	if err := os.MkdirAll(u.baseDir, 0o750); err != nil {
-		return "", nil, "", fmt.Errorf("ensure uploads dir: %w", err)
 	}
 
 	src, err := fileHeader.Open()
@@ -60,8 +64,26 @@ func (u *Uploader) SaveMultipartImage(fileHeader *multipart.FileHeader, maxBytes
 	}
 	defer func() { _ = src.Close() }()
 
-	ext := pickExtension(mimeType, fileHeader.Filename)
-	filename := fmt.Sprintf("%s%s", randomHex(16), ext)
+	// Buffer the stream so we can peek the leading bytes for detection without
+	// consuming them, then copy the full content to disk.
+	br := bufio.NewReaderSize(src, sniffLen)
+	head, err := br.Peek(sniffLen)
+	// io.EOF/ErrUnexpectedEOF means the file is shorter than sniffLen; detect on
+	// whatever we got and surface any other read error.
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		return "", nil, "", fmt.Errorf("read upload header: %w", err)
+	}
+
+	sig, ok := detectSignature(head)
+	if !ok {
+		return "", nil, "", fmt.Errorf("unsupported or malformed file content")
+	}
+
+	if err := os.MkdirAll(u.baseDir, 0o750); err != nil {
+		return "", nil, "", fmt.Errorf("ensure uploads dir: %w", err)
+	}
+
+	filename := fmt.Sprintf("%s%s", randomHex(16), sig.ext)
 	dstPath := filepath.Join(u.baseDir, filename)
 	// Ensure the destination path stays within the base uploads directory to prevent path traversal.
 	base := filepath.Clean(u.baseDir)
@@ -78,7 +100,8 @@ func (u *Uploader) SaveMultipartImage(fileHeader *multipart.FileHeader, maxBytes
 		_ = dst.Close()
 	}()
 
-	limited := io.LimitReader(src, maxBytes)
+	// Copy the full content (including the peeked header) from the buffered reader.
+	limited := io.LimitReader(br, maxBytes)
 	if _, err := io.Copy(dst, limited); err != nil {
 		_ = os.Remove(cleanDst)
 		return "", nil, "", fmt.Errorf("copy upload: %w", err)
@@ -87,25 +110,17 @@ func (u *Uploader) SaveMultipartImage(fileHeader *multipart.FileHeader, maxBytes
 	cleanup := func() error {
 		return os.Remove(cleanDst)
 	}
-	return cleanDst, cleanup, mimeType, nil
+	return cleanDst, cleanup, sig.mime, nil
 }
 
-func isAllowedUploadMime(mimeType string) bool {
-	mt := strings.ToLower(strings.TrimSpace(mimeType))
-	_, ok := allowedUploadMimes[mt]
-	return ok
-}
-
-func pickExtension(mimeType, original string) string {
-	mt := strings.ToLower(strings.TrimSpace(mimeType))
-	if ext, ok := allowedUploadMimes[mt]; ok {
-		return ext
+// detectSignature returns the signature whose magic number prefixes head.
+func detectSignature(head []byte) (signature, bool) {
+	for _, s := range signatures {
+		if bytes.HasPrefix(head, s.magic) {
+			return s, true
+		}
 	}
-	ext := strings.ToLower(filepath.Ext(original))
-	if ext == "" {
-		return ".bin"
-	}
-	return ext
+	return signature{}, false
 }
 
 func randomHex(n int) string {
