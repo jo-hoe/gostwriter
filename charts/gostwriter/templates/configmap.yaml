@@ -33,15 +33,15 @@ data:
       mock:
         delay: {{ .Values.llm.mock.delay }}
         prefix: {{ .Values.llm.mock.prefix | quote }}
-      aiproxy:
-        baseUrl: {{ .Values.llm.aiproxy.baseUrl | quote }}
-        apiKey: {{ .Values.llm.aiproxy.apiKey | quote }}
-        model: {{ .Values.llm.aiproxy.model | quote }}
-        systemPrompt: {{ .Values.llm.aiproxy.systemPrompt | quote }}
-        instructions: {{ .Values.llm.aiproxy.instructions | quote }}
-        temperature: {{ .Values.llm.aiproxy.temperature }}
-        maxTokens: {{ .Values.llm.aiproxy.maxTokens }}
-        timeout: {{ .Values.llm.aiproxy.timeout }}
+      openai:
+        baseUrl: {{ .Values.llm.openai.baseUrl | quote }}
+        apiKey: {{ .Values.llm.openai.apiKey | quote }}
+        model: {{ .Values.llm.openai.model | quote }}
+        systemPrompt: {{ .Values.llm.openai.systemPrompt | quote }}
+        instructions: {{ .Values.llm.openai.instructions | quote }}
+        temperature: {{ .Values.llm.openai.temperature }}
+        maxTokens: {{ .Values.llm.openai.maxTokens }}
+        timeout: {{ .Values.llm.openai.timeout }}
     target:
       github:
         enabled: {{ .Values.target.github.enabled }}

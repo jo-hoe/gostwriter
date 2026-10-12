@@ -40,17 +40,17 @@ Helm chart for deploying Gostwriter
 | ingress.enabled | bool | `false` | Enable Ingress |
 | ingress.hosts | list | `[{"host":"gostwriter.local","paths":[{"path":"/","pathType":"Prefix"}]}]` | Ingress host definitions |
 | ingress.tls | list | `[]` | TLS configuration for the Ingress |
-| llm.aiproxy.apiKey | string | `""` | API key for the AI Proxy (optional) |
-| llm.aiproxy.baseUrl | string | `"http://localhost:8900"` | Base URL for AI Proxy (OpenAI-compatible) endpoint |
-| llm.aiproxy.instructions | string | `""` | Optional instructions prompt override |
-| llm.aiproxy.maxTokens | int | `0` | Maximum tokens for responses (0 uses provider default) |
-| llm.aiproxy.model | string | `"gpt-5"` | Model name to use |
-| llm.aiproxy.systemPrompt | string | `""` | Optional system prompt override |
-| llm.aiproxy.temperature | int | `0` | Sampling temperature |
-| llm.aiproxy.timeout | string | `"0"` | HTTP client timeout for LLM requests (0 uses default of 5m) |
 | llm.mock.delay | string | `"2s"` | Artificial delay for mock responses |
 | llm.mock.prefix | string | `"Transcribed by Mock"` | Prefix added by the mock provider |
-| llm.provider | string | `"mock"` | Provider selection: "mock" or "aiproxy" |
+| llm.openai.apiKey | string | `""` | API key / bearer token for the endpoint (optional; ai-proxy injects its own) |
+| llm.openai.baseUrl | string | `"http://localhost:8900"` | Base URL for the OpenAI-compatible endpoint. Point this at an ai-proxy reverse proxy (e.g. http://localhost:8900) or https://api.openai.com. |
+| llm.openai.instructions | string | `""` | Optional instructions prompt override |
+| llm.openai.maxTokens | int | `0` | Maximum tokens for responses (0 uses provider default) |
+| llm.openai.model | string | `"gpt-5"` | Model name to use |
+| llm.openai.systemPrompt | string | `""` | Optional system prompt override |
+| llm.openai.temperature | int | `0` | Sampling temperature |
+| llm.openai.timeout | string | `"0"` | HTTP client timeout for LLM requests (0 uses default of 5m) |
+| llm.provider | string | `"mock"` | Provider selection: "mock" or "openai" |
 | nameOverride | string | `""` | Partially override the chart name |
 | nodeSelector | object | `{}` | Node selector for Pod assignment |
 | persistence | object | `{"accessModes":["ReadWriteOnce"],"enabled":false,"existingClaim":"","size":"1Gi","storageClass":""}` | Persistence for /app/data (SQLite DB and git clone cache) |

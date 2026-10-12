@@ -39,9 +39,9 @@ type ServerConfig struct {
 
 // LLMConfig selects provider and provider-specific options.
 type LLMConfig struct {
-	Provider string          `yaml:"provider"` // e.g. "mock" or "aiproxy"
-	Mock     MockSettings    `yaml:"mock"`
-	AIProxy  AIProxySettings `yaml:"aiproxy"`
+	Provider string         `yaml:"provider"` // "mock" or "openai"
+	Mock     MockSettings   `yaml:"mock"`
+	OpenAI   OpenAISettings `yaml:"openai"`
 }
 
 // MockSettings config for the mock LLM.
@@ -50,9 +50,10 @@ type MockSettings struct {
 	Prefix string        `yaml:"prefix"`
 }
 
-// AIProxySettings config for the AI Proxy (OpenAI-compatible) LLM.
-type AIProxySettings struct {
-	BaseURL      string        `yaml:"baseUrl"`      // e.g. http://localhost:8900
+// OpenAISettings configures the OpenAI-compatible chat provider. BaseURL may
+// point at api.openai.com, an ai-proxy reverse proxy, or any compatible gateway.
+type OpenAISettings struct {
+	BaseURL      string        `yaml:"baseUrl"`      // e.g. http://localhost:8900 (ai-proxy) or https://api.openai.com
 	APIKey       string        `yaml:"apiKey"`       // optional
 	Model        string        `yaml:"model"`        // e.g. gpt-5
 	SystemPrompt string        `yaml:"systemPrompt"` // optional system message override
@@ -276,13 +277,13 @@ func applyDefaults(cfg *Config) {
 	if cfg.LLM.Mock.Prefix == "" {
 		cfg.LLM.Mock.Prefix = "Transcribed by Mock"
 	}
-	// AI Proxy sensible defaults (used if provider == "aiproxy")
-	if strings.EqualFold(cfg.LLM.Provider, "aiproxy") {
-		if strings.TrimSpace(cfg.LLM.AIProxy.BaseURL) == "" {
-			cfg.LLM.AIProxy.BaseURL = "http://localhost:8900"
+	// OpenAI sensible defaults (used if provider == "openai")
+	if strings.EqualFold(cfg.LLM.Provider, "openai") {
+		if strings.TrimSpace(cfg.LLM.OpenAI.BaseURL) == "" {
+			cfg.LLM.OpenAI.BaseURL = "http://localhost:8900"
 		}
-		if strings.TrimSpace(cfg.LLM.AIProxy.Model) == "" {
-			cfg.LLM.AIProxy.Model = "gpt-5"
+		if strings.TrimSpace(cfg.LLM.OpenAI.Model) == "" {
+			cfg.LLM.OpenAI.Model = "gpt-5"
 		}
 	}
 }
@@ -309,6 +310,14 @@ func postProcessTargets(cfg *Config) error {
 }
 
 func validate(cfg *Config) error {
+	// Validate the LLM provider selection.
+	switch strings.ToLower(strings.TrimSpace(cfg.LLM.Provider)) {
+	case "mock", "openai":
+		// valid
+	default:
+		return fmt.Errorf("llm.provider must be \"mock\" or \"openai\", got %q", cfg.LLM.Provider)
+	}
+
 	// Ensure at least one target is enabled
 	if !cfg.Target.GitHub.Enabled {
 		return errors.New("no target enabled")

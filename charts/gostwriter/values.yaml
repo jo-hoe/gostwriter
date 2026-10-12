@@ -130,12 +130,13 @@ server:
   callbackBackoff: 2s
 
 llm:
-  # -- Provider selection: "mock" or "aiproxy"
+  # -- Provider selection: "mock" or "openai"
   provider: "mock"
-  aiproxy:
-    # -- Base URL for AI Proxy (OpenAI-compatible) endpoint
+  openai:
+    # -- Base URL for the OpenAI-compatible endpoint. Point this at an ai-proxy
+    # -- reverse proxy (e.g. http://localhost:8900) or https://api.openai.com.
     baseUrl: "http://localhost:8900"
-    # -- API key for the AI Proxy (optional)
+    # -- API key / bearer token for the endpoint (optional; ai-proxy injects its own)
     apiKey: ""
     # -- Model name to use
     model: "gpt-5"

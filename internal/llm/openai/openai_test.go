@@ -1,4 +1,4 @@
-package aiproxy
+package openai
 
 import (
 	"bytes"
@@ -12,11 +12,12 @@ import (
 	"time"
 
 	"github.com/jo-hoe/gostwriter/internal/config"
+	"github.com/jo-hoe/gostwriter/internal/llm/openai/chat"
 )
 
-func TestAIProxy_TranscribeImage_Success(t *testing.T) {
+func TestOpenAI_TranscribeImage_Success(t *testing.T) {
 	var seenAuth string
-	var seenBody chatCompletionRequest
+	var seenBody chat.Request
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seenAuth = r.Header.Get("Authorization")
@@ -24,31 +25,15 @@ func TestAIProxy_TranscribeImage_Success(t *testing.T) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		if err := json.NewDecoder(r.Body).Decode(&seenBody); err != nil {
-			http.Error(w, "bad json", http.StatusBadRequest)
-			return
-		}
+		_ = json.NewDecoder(r.Body).Decode(&seenBody)
 		w.Header().Set("Content-Type", "application/json")
-		resp := chatCompletionResponse{
-			ID:      "id-123",
-			Object:  "chat.completion",
-			Created: time.Now().Unix(),
-			Choices: []chatCompletionChoice{
-				{
-					Index: 0,
-					Message: responseMsg{
-						Role:    "assistant",
-						Content: "Hello Markdown",
-					},
-					FinishReason: "stop",
-				},
-			},
-		}
-		_ = json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(chat.Response{
+			Choices: []chat.Choice{{Message: chat.ResponseMsg{Role: "assistant", Content: "Hello Markdown"}}},
+		})
 	}))
 	defer ts.Close()
 
-	cfg := config.AIProxySettings{
+	cfg := config.OpenAISettings{
 		BaseURL:      ts.URL,
 		APIKey:       "k123",
 		Model:        "gpt-5",
@@ -70,17 +55,15 @@ func TestAIProxy_TranscribeImage_Success(t *testing.T) {
 	if seenAuth != "Bearer k123" {
 		t.Fatalf("missing/incorrect auth header, got %q", seenAuth)
 	}
-	// Validate the request carried our prompts and model
 	if seenBody.Model != "gpt-5" {
 		t.Fatalf("expected model gpt-5, got %q", seenBody.Model)
 	}
 	if len(seenBody.Messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(seenBody.Messages))
 	}
-	if seenBody.Messages[0].Role != "system" || seenBody.Messages[0].Content.(string) != "System X" {
+	if seenBody.Messages[0].Role != chat.RoleSystem || seenBody.Messages[0].Content.(string) != "System X" {
 		t.Fatalf("system prompt not set correctly: %+v", seenBody.Messages[0])
 	}
-	// user content is []messagePart (marshalled as []any). Check first part is text with our instructions.
 	userParts, ok := seenBody.Messages[1].Content.([]any)
 	if !ok || len(userParts) == 0 {
 		t.Fatalf("user content not array of parts: %#v", seenBody.Messages[1].Content)
@@ -91,24 +74,27 @@ func TestAIProxy_TranscribeImage_Success(t *testing.T) {
 	}
 }
 
-// captureUserParts runs TranscribeImage against a stub server and returns the
-// user message content parts (each a map[string]any) as decoded from the request.
-func captureUserParts(t *testing.T, mime string, data []byte) []any {
-	t.Helper()
-	var seenBody chatCompletionRequest
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewDecoder(r.Body).Decode(&seenBody); err != nil {
-			http.Error(w, "bad json", http.StatusBadRequest)
-			return
+// stubServer returns an httptest server that always replies with the given
+// completion content, decoding each request into *dst when dst is non-nil.
+func stubServer(content string, dst *chat.Request) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if dst != nil {
+			_ = json.NewDecoder(r.Body).Decode(dst)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(chatCompletionResponse{
-			Choices: []chatCompletionChoice{{Message: responseMsg{Content: "ok"}}},
+		_ = json.NewEncoder(w).Encode(chat.Response{
+			Choices: []chat.Choice{{Message: chat.ResponseMsg{Role: "assistant", Content: content}}},
 		})
 	}))
+}
+
+func captureUserParts(t *testing.T, mime string, data []byte) []any {
+	t.Helper()
+	var seenBody chat.Request
+	ts := stubServer("ok", &seenBody)
 	defer ts.Close()
 
-	c := New(config.AIProxySettings{BaseURL: ts.URL, Model: "gpt-5"})
+	c := New(config.OpenAISettings{BaseURL: ts.URL, Model: "gpt-5"})
 	if _, _, err := c.TranscribeImage(context.Background(), bytes.NewReader(data), mime); err != nil {
 		t.Fatalf("TranscribeImage: %v", err)
 	}
@@ -119,7 +105,7 @@ func captureUserParts(t *testing.T, mime string, data []byte) []any {
 	return parts
 }
 
-func TestAIProxy_TranscribeImage_PNGUsesImageURLPart(t *testing.T) {
+func TestOpenAI_TranscribeImage_PNGUsesImageURLPart(t *testing.T) {
 	parts := captureUserParts(t, "image/png", []byte("pngbytes"))
 	if len(parts) != 2 {
 		t.Fatalf("expected 2 parts (text + image), got %d", len(parts))
@@ -138,7 +124,7 @@ func TestAIProxy_TranscribeImage_PNGUsesImageURLPart(t *testing.T) {
 	}
 }
 
-func TestAIProxy_TranscribeImage_PDFUsesFilePart(t *testing.T) {
+func TestOpenAI_TranscribeImage_PDFUsesFilePart(t *testing.T) {
 	parts := captureUserParts(t, "application/pdf", []byte("%PDF-1.7"))
 	if len(parts) != 2 {
 		t.Fatalf("expected 2 parts (text + file), got %d", len(parts))
@@ -158,67 +144,43 @@ func TestAIProxy_TranscribeImage_PDFUsesFilePart(t *testing.T) {
 	if !strings.HasPrefix(fileData, "data:application/pdf;base64,") {
 		t.Fatalf("file_data prefix mismatch: %q", fileData)
 	}
-	// A PDF must not also carry an image_url part.
 	if _, has := fp["image_url"]; has {
 		t.Fatalf("pdf file part should not include image_url: %#v", fp)
 	}
 }
 
-func TestAIProxy_TranscribeImage_Non200(t *testing.T) {
+func TestOpenAI_TranscribeImage_Non200(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 	}))
 	defer ts.Close()
 
-	cfg := config.AIProxySettings{
-		BaseURL: ts.URL,
-		Model:   "gpt-5",
-	}
-	c := New(cfg)
-
+	c := New(config.OpenAISettings{BaseURL: ts.URL, Model: "gpt-5"})
 	_, _, err := c.TranscribeImage(context.Background(), bytes.NewBuffer([]byte("x")), "image/png")
 	if err == nil {
 		t.Fatalf("expected error for non-200 response")
 	}
 }
 
-func TestAIProxy_TranscribeImage_EmptyImage(t *testing.T) {
+func TestOpenAI_TranscribeImage_EmptyImage(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatalf("server should not be called for empty image")
 	}))
 	defer ts.Close()
 
-	cfg := config.AIProxySettings{
-		BaseURL: ts.URL,
-		Model:   "gpt-5",
-	}
-	c := New(cfg)
-
+	c := New(config.OpenAISettings{BaseURL: ts.URL, Model: "gpt-5"})
 	_, _, err := c.TranscribeImage(context.Background(), bytes.NewBuffer(nil), "image/png")
 	if err == nil {
 		t.Fatalf("expected error for empty image")
 	}
 }
 
-func TestAIProxy_GenerateTitle_Success(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body chatCompletionRequest
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		// Title request must be text-only (string content, not []messagePart)
-		if _, ok := body.Messages[1].Content.(string); !ok {
-			http.Error(w, "expected string content", http.StatusBadRequest)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(chatCompletionResponse{
-			Choices: []chatCompletionChoice{
-				{Message: responseMsg{Content: "My Generated Title"}},
-			},
-		})
-	}))
+func TestOpenAI_GenerateTitle_Success(t *testing.T) {
+	var seenBody chat.Request
+	ts := stubServer("My Generated Title", &seenBody)
 	defer ts.Close()
 
-	c := New(config.AIProxySettings{BaseURL: ts.URL, Model: "gpt-5"})
+	c := New(config.OpenAISettings{BaseURL: ts.URL, Model: "gpt-5"})
 	title, err := c.GenerateTitle(context.Background(), "# Some markdown content")
 	if err != nil {
 		t.Fatal(err)
@@ -226,20 +188,17 @@ func TestAIProxy_GenerateTitle_Success(t *testing.T) {
 	if title != "My Generated Title" {
 		t.Fatalf("unexpected title: %q", title)
 	}
+	// Title request must be text-only (string content, not []chat.Part).
+	if _, ok := seenBody.Messages[1].Content.(string); !ok {
+		t.Fatalf("expected string content for title request: %#v", seenBody.Messages[1].Content)
+	}
 }
 
-func TestAIProxy_GenerateTitle_StripsSurroundingQuotes(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(chatCompletionResponse{
-			Choices: []chatCompletionChoice{
-				{Message: responseMsg{Content: `"Quoted Title"`}},
-			},
-		})
-	}))
+func TestOpenAI_GenerateTitle_StripsSurroundingQuotes(t *testing.T) {
+	ts := stubServer(`"Quoted Title"`, nil)
 	defer ts.Close()
 
-	c := New(config.AIProxySettings{BaseURL: ts.URL, Model: "gpt-5"})
+	c := New(config.OpenAISettings{BaseURL: ts.URL, Model: "gpt-5"})
 	title, err := c.GenerateTitle(context.Background(), "some markdown")
 	if err != nil {
 		t.Fatal(err)
@@ -249,43 +208,38 @@ func TestAIProxy_GenerateTitle_StripsSurroundingQuotes(t *testing.T) {
 	}
 }
 
-func TestAIProxy_GenerateTitle_EmptyCompletion(t *testing.T) {
+func TestOpenAI_GenerateTitle_EmptyCompletion(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(chatCompletionResponse{Choices: []chatCompletionChoice{}})
+		_ = json.NewEncoder(w).Encode(chat.Response{Choices: []chat.Choice{}})
 	}))
 	defer ts.Close()
 
-	c := New(config.AIProxySettings{BaseURL: ts.URL, Model: "gpt-5"})
+	c := New(config.OpenAISettings{BaseURL: ts.URL, Model: "gpt-5"})
 	_, err := c.GenerateTitle(context.Background(), "some markdown")
 	if err == nil {
 		t.Fatal("expected error for empty choices")
 	}
 }
 
-func TestAIProxy_GenerateTitle_Non200(t *testing.T) {
+func TestOpenAI_GenerateTitle_Non200(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}))
 	defer ts.Close()
 
-	c := New(config.AIProxySettings{BaseURL: ts.URL, Model: "gpt-5"})
+	c := New(config.OpenAISettings{BaseURL: ts.URL, Model: "gpt-5"})
 	_, err := c.GenerateTitle(context.Background(), "some markdown")
 	if err == nil {
 		t.Fatal("expected error for non-200 response")
 	}
 }
 
-func TestAIProxy_TranscribeImage_ReturnsConversation(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(chatCompletionResponse{
-			Choices: []chatCompletionChoice{{Message: responseMsg{Content: "transcribed"}}},
-		})
-	}))
+func TestOpenAI_TranscribeImage_ReturnsConversation(t *testing.T) {
+	ts := stubServer("transcribed", nil)
 	defer ts.Close()
 
-	c := New(config.AIProxySettings{BaseURL: ts.URL, Model: "gpt-5"})
+	c := New(config.OpenAISettings{BaseURL: ts.URL, Model: "gpt-5"})
 	_, conv, err := c.TranscribeImage(context.Background(), bytes.NewReader([]byte("img")), "image/png")
 	if err != nil {
 		t.Fatalf("TranscribeImage: %v", err)
@@ -293,31 +247,31 @@ func TestAIProxy_TranscribeImage_ReturnsConversation(t *testing.T) {
 	if conv == nil {
 		t.Fatal("expected non-nil conversation")
 	}
-	if conv.Provider() != "aiproxy" {
+	if conv.Provider() != providerName {
 		t.Fatalf("unexpected provider: %q", conv.Provider())
 	}
 }
 
-func TestAIProxy_SuggestFilename_ContinuesConversation(t *testing.T) {
-	var secondBody chatCompletionRequest
+func TestOpenAI_SuggestFilename_ContinuesConversation(t *testing.T) {
+	var secondBody chat.Request
 	var calls int
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		if calls == 2 {
 			_ = json.NewDecoder(r.Body).Decode(&secondBody)
 		}
-		w.Header().Set("Content-Type", "application/json")
 		content := "transcribed"
 		if calls == 2 {
 			content = `"invoice-november"`
 		}
-		_ = json.NewEncoder(w).Encode(chatCompletionResponse{
-			Choices: []chatCompletionChoice{{Message: responseMsg{Content: content}}},
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(chat.Response{
+			Choices: []chat.Choice{{Message: chat.ResponseMsg{Role: "assistant", Content: content}}},
 		})
 	}))
 	defer ts.Close()
 
-	c := New(config.AIProxySettings{BaseURL: ts.URL, Model: "gpt-5"})
+	c := New(config.OpenAISettings{BaseURL: ts.URL, Model: "gpt-5"})
 	_, conv, err := c.TranscribeImage(context.Background(), bytes.NewReader([]byte("img")), "image/png")
 	if err != nil {
 		t.Fatalf("TranscribeImage: %v", err)
@@ -335,16 +289,16 @@ func TestAIProxy_SuggestFilename_ContinuesConversation(t *testing.T) {
 	if len(secondBody.Messages) != 4 {
 		t.Fatalf("expected 4 messages continuing the conversation, got %d", len(secondBody.Messages))
 	}
-	if secondBody.Messages[2].Role != RoleAssistant {
+	if secondBody.Messages[2].Role != chat.RoleAssistant {
 		t.Fatalf("expected assistant reply retained at index 2, got %q", secondBody.Messages[2].Role)
 	}
-	if secondBody.Messages[3].Role != RoleUser {
+	if secondBody.Messages[3].Role != chat.RoleUser {
 		t.Fatalf("expected filename instruction as final user turn, got %q", secondBody.Messages[3].Role)
 	}
 }
 
-func TestAIProxy_SuggestFilename_RejectsForeignConversation(t *testing.T) {
-	c := New(config.AIProxySettings{BaseURL: "http://example.invalid", Model: "gpt-5"})
+func TestOpenAI_SuggestFilename_RejectsForeignConversation(t *testing.T) {
+	c := New(config.OpenAISettings{BaseURL: "http://example.invalid", Model: "gpt-5"})
 	_, err := c.SuggestFilename(context.Background(), foreignConversation{})
 	if err == nil {
 		t.Fatal("expected error for conversation from another provider")
@@ -355,7 +309,7 @@ type foreignConversation struct{}
 
 func (foreignConversation) Provider() string { return "other" }
 
-func TestAIProxy_TranscribeImage_ContextCancel(t *testing.T) {
+func TestOpenAI_TranscribeImage_ContextCancel(t *testing.T) {
 	var started int32
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.StoreInt32(&started, 1)
@@ -363,11 +317,7 @@ func TestAIProxy_TranscribeImage_ContextCancel(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	cfg := config.AIProxySettings{
-		BaseURL: ts.URL,
-		Model:   "gpt-5",
-	}
-	c := New(cfg)
+	c := New(config.OpenAISettings{BaseURL: ts.URL, Model: "gpt-5"})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()

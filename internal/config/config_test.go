@@ -369,3 +369,112 @@ func TestLoad_ArchivePathEqualsBasePathRejected(t *testing.T) {
 		t.Fatalf("error should mention archive.path, got: %v", err)
 	}
 }
+
+func TestLoad_UnknownProviderRejected(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	yaml := `
+server:
+  address: ":0"
+  storageDir: "` + escapeBackslashes(dir) + `"
+llm:
+  provider: "bogus"
+target:
+  github:
+    enabled: true
+    repositoryOwner: "org"
+    repositoryName: "repo"
+    branch: "main"
+    filenameTemplate: "{{ .JobID }}.md"
+    commitMessageTemplate: "Add {{ .JobID }}"
+    auth:
+      token: "tok"
+`
+	if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for unknown llm.provider")
+	}
+	if !strings.Contains(err.Error(), "provider") {
+		t.Fatalf("error should mention provider, got: %v", err)
+	}
+}
+
+func TestLoad_OpenAIProviderLoadsSettings(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	yaml := `
+server:
+  address: ":0"
+  storageDir: "` + escapeBackslashes(dir) + `"
+llm:
+  provider: "openai"
+  openai:
+    baseUrl: "http://proxy:8900"
+    apiKey: "sk-test"
+    model: "gpt-5"
+target:
+  github:
+    enabled: true
+    repositoryOwner: "org"
+    repositoryName: "repo"
+    branch: "main"
+    filenameTemplate: "{{ .JobID }}.md"
+    commitMessageTemplate: "Add {{ .JobID }}"
+    auth:
+      token: "tok"
+`
+	if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.LLM.Provider != "openai" {
+		t.Fatalf("expected provider=openai, got %q", cfg.LLM.Provider)
+	}
+	if cfg.LLM.OpenAI.BaseURL != "http://proxy:8900" {
+		t.Fatalf("baseUrl mismatch: %q", cfg.LLM.OpenAI.BaseURL)
+	}
+	if cfg.LLM.OpenAI.APIKey != "sk-test" || cfg.LLM.OpenAI.Model != "gpt-5" {
+		t.Fatalf("openai settings mismatch: %+v", cfg.LLM.OpenAI)
+	}
+}
+
+func TestLoad_OpenAIProviderDefaults(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	yaml := `
+server:
+  address: ":0"
+  storageDir: "` + escapeBackslashes(dir) + `"
+llm:
+  provider: "openai"
+target:
+  github:
+    enabled: true
+    repositoryOwner: "org"
+    repositoryName: "repo"
+    branch: "main"
+    filenameTemplate: "{{ .JobID }}.md"
+    commitMessageTemplate: "Add {{ .JobID }}"
+    auth:
+      token: "tok"
+`
+	if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.LLM.OpenAI.BaseURL != "http://localhost:8900" {
+		t.Fatalf("expected default baseUrl, got %q", cfg.LLM.OpenAI.BaseURL)
+	}
+	if cfg.LLM.OpenAI.Model != "gpt-5" {
+		t.Fatalf("expected default model gpt-5, got %q", cfg.LLM.OpenAI.Model)
+	}
+}
