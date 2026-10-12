@@ -20,6 +20,8 @@ type stubNamer struct{ path string }
 
 func (s *stubNamer) Name(_ naming.NamingRequest) (string, error) { return s.path, nil }
 
+func boolPtr(b bool) *bool { return &b }
+
 func newTestTarget(t *testing.T, cfg appcfg.GitHubTargetConfig, namer naming.FileNamer) *Target {
 	t.Helper()
 	if namer == nil {
@@ -320,12 +322,9 @@ func TestPost_ArchiveTwoCommits(t *testing.T) {
 	if !strings.HasSuffix(puts[1].Path, "/contents/inbox/job-xyz.md") {
 		t.Fatalf("second PUT should be the transcription, got: %s", puts[1].Path)
 	}
-	if got := decodeContent(t, puts[0]); got != string(original) {
-		t.Fatalf("original content mismatch: %q", got)
-	}
 	md := decodeContent(t, puts[1])
-	if !strings.Contains(md, "> Original: [document](../originals/job-xyz.pdf)") {
-		t.Fatalf("markdown missing original link:\n%s", md)
+	if strings.Contains(md, "> Original:") {
+		t.Fatalf("archive without linkInFrontmatter must not inject a body blockquote:\n%s", md)
 	}
 	if !strings.Contains(res.Location, "inbox/job-xyz.md") {
 		t.Fatalf("Location should point at the transcription, got: %s", res.Location)
@@ -407,9 +406,9 @@ func TestPost_ArchiveSameFolderAsTranscription(t *testing.T) {
 	if !strings.HasSuffix(puts[1].Path, "/contents/inbox/job-xyz.md") {
 		t.Fatalf("transcription should sit in inbox/, got: %s", puts[1].Path)
 	}
-	// A same-folder sibling link is just the bare filename.
-	if md := decodeContent(t, puts[1]); !strings.Contains(md, "> Original: [document](job-xyz.pdf)") {
-		t.Fatalf("markdown should link to sibling original:\n%s", md)
+	// Without linkInFrontmatter the archive is silent — no link injected.
+	if md := decodeContent(t, puts[1]); strings.Contains(md, "> Original:") {
+		t.Fatalf("archive without linkInFrontmatter must not inject a body blockquote:\n%s", md)
 	}
 }
 
@@ -470,13 +469,115 @@ func TestRelLink(t *testing.T) {
 	}
 }
 
-func TestInjectOriginalLink(t *testing.T) {
-	withH1 := injectOriginalLink("# Title\n\nbody", "../originals/a.pdf")
-	if withH1 != "# Title\n\n> Original: [document](../originals/a.pdf)\n\nbody" {
-		t.Errorf("H1 case mismatch:\n%q", withH1)
+func TestPost_ArchiveLinkInFrontmatter_SubFolder(t *testing.T) {
+	var puts []recordedPut
+	srv := newArchiveServer(&puts)
+	defer srv.Close()
+
+	cfg := archiveTestConfig(srv.URL, true)
+	cfg.Archive.LinkInFrontmatter = boolPtr(true) // archive.path stays "originals/"
+	tg := newTestTarget(t, cfg, nil)
+	tg.WithHTTPClient(srv.Client())
+
+	_, err := tg.Post(context.Background(), targets.TargetRequest{
+		JobID:     "job-xyz",
+		Markdown:  "# Title\n\nbody text",
+		Timestamp: time.Now().UTC(),
+		Original:  &targets.OriginalDocument{Content: []byte("%PDF"), Extension: ".pdf", MimeType: "application/pdf"},
+	})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
 	}
-	noH1 := injectOriginalLink("just body", "../originals/a.pdf")
-	if noH1 != "> Original: [document](../originals/a.pdf)\n\njust body" {
-		t.Errorf("no-H1 case mismatch:\n%q", noH1)
+	md := decodeContent(t, puts[1])
+	if !strings.Contains(md, "original: ../originals/job-xyz.pdf") {
+		t.Fatalf("frontmatter missing original field:\n%s", md)
+	}
+	if strings.Contains(md, "> Original:") {
+		t.Fatalf("body blockquote must not be present:\n%s", md)
+	}
+}
+
+func TestPost_ArchiveLinkInFrontmatter_SameFolder(t *testing.T) {
+	var puts []recordedPut
+	srv := newArchiveServer(&puts)
+	defer srv.Close()
+
+	cfg := archiveTestConfig(srv.URL, true)
+	cfg.Archive.Path = "inbox/"
+	cfg.Archive.LinkInFrontmatter = boolPtr(true)
+	tg := newTestTarget(t, cfg, nil)
+	tg.WithHTTPClient(srv.Client())
+
+	_, err := tg.Post(context.Background(), targets.TargetRequest{
+		JobID:     "job-xyz",
+		Markdown:  "# Title\n\nbody",
+		Timestamp: time.Now().UTC(),
+		Original:  &targets.OriginalDocument{Content: []byte("%PDF"), Extension: ".pdf", MimeType: "application/pdf"},
+	})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+	md := decodeContent(t, puts[1])
+	if !strings.Contains(md, "original: job-xyz.pdf") {
+		t.Fatalf("frontmatter missing sibling original field:\n%s", md)
+	}
+}
+
+func TestPost_ArchiveLinkInFrontmatter_ExistingFrontmatter(t *testing.T) {
+	var puts []recordedPut
+	srv := newArchiveServer(&puts)
+	defer srv.Close()
+
+	cfg := archiveTestConfig(srv.URL, true)
+	cfg.Archive.LinkInFrontmatter = boolPtr(true)
+	tg := newTestTarget(t, cfg, nil)
+	tg.WithHTTPClient(srv.Client())
+
+	existingFM := "---\nsource: scan.png\nsource_hash: abc123\ntranscriptionDate: 2024-01-01T00:00:00Z\n---\n\n# Title\n\nbody"
+	_, err := tg.Post(context.Background(), targets.TargetRequest{
+		JobID:     "job-xyz",
+		Markdown:  existingFM,
+		Timestamp: time.Now().UTC(),
+		Original:  &targets.OriginalDocument{Content: []byte("%PDF"), Extension: ".pdf", MimeType: "application/pdf"},
+	})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+	md := decodeContent(t, puts[1])
+	if !strings.Contains(md, "original: ../originals/job-xyz.pdf") {
+		t.Fatalf("original field not injected into existing frontmatter:\n%s", md)
+	}
+	// Must not create a second frontmatter block — only one pair of ---.
+	if strings.Count(md, "---") != 2 {
+		t.Fatalf("expected exactly one frontmatter block (2 --- markers), got:\n%s", md)
+	}
+	if !strings.Contains(md, "source: scan.png") {
+		t.Fatalf("existing frontmatter fields must be preserved:\n%s", md)
+	}
+}
+
+func TestInjectFrontmatterOriginal(t *testing.T) {
+	// No existing frontmatter — minimal block created.
+	got := injectFrontmatterOriginal("# Title\n\nbody", "orig/a.pdf")
+	if !strings.HasPrefix(got, "---\noriginal: orig/a.pdf\n---\n\n# Title") {
+		t.Errorf("no-FM case:\n%q", got)
+	}
+
+	// Existing frontmatter — field appended inside it.
+	fm := "---\nsource: x\n---\n\nbody"
+	got = injectFrontmatterOriginal(fm, "orig/a.pdf")
+	if !strings.Contains(got, "source: x") || !strings.Contains(got, "original: orig/a.pdf") {
+		t.Errorf("existing-FM case field missing:\n%q", got)
+	}
+	if strings.Count(got, "---") != 2 {
+		t.Errorf("existing-FM case should have exactly 2 --- markers:\n%q", got)
+	}
+	// original field must be inside the frontmatter block (before the second ---)
+	closingIdx := strings.Index(got, "\n---\n")
+	if closingIdx < 0 {
+		closingIdx = strings.Index(got, "\n---")
+	}
+	if !strings.Contains(got[:closingIdx], "original:") {
+		t.Errorf("original field not inside frontmatter block:\n%q", got)
 	}
 }

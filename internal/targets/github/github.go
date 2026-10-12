@@ -87,7 +87,7 @@ func (t *Target) Post(ctx context.Context, req targets.TargetRequest) (targets.T
 
 	markdown := req.Markdown
 
-	// Optionally archive the original document first, then link to it.
+	// Optionally archive the original document first.
 	if t.cfg.Archive.Enabled && req.Original != nil {
 		originalPath := swapDirExt(mdPath, t.cfg.Archive.Path, req.Original.Extension)
 		if originalPath == mdPath {
@@ -96,7 +96,9 @@ func (t *Target) Post(ctx context.Context, req targets.TargetRequest) (targets.T
 		if _, err := t.putContents(ctx, originalPath, req.Original.Content, commitMsg); err != nil {
 			return targets.TargetResult{}, fmt.Errorf("archive original: %w", err)
 		}
-		markdown = injectOriginalLink(markdown, relLink(mdPath, originalPath))
+		if t.cfg.Archive.LinkInFrontmatter != nil && *t.cfg.Archive.LinkInFrontmatter {
+			markdown = injectFrontmatterOriginal(markdown, relLink(mdPath, originalPath))
+		}
 	}
 
 	out, err := t.putContents(ctx, mdPath, []byte(markdown), commitMsg)
@@ -206,21 +208,24 @@ func splitPath(p string) []string {
 	return strings.Split(p, "/")
 }
 
-// injectOriginalLink inserts a blockquote link to the original document. When the
-// markdown begins with an H1 heading, the link is placed just below it; otherwise
-// it is prepended.
-func injectOriginalLink(md, link string) string {
-	blockquote := fmt.Sprintf("> Original: [document](%s)", link)
+// injectFrontmatterOriginal adds an `original` field to the YAML frontmatter
+// of the Markdown document pointing to the archived original via a relative
+// link. If the document already starts with a frontmatter block (---…---) the
+// field is appended inside it; otherwise a minimal block is prepended.
+func injectFrontmatterOriginal(md, link string) string {
+	const sep = "---"
 	trimmed := strings.TrimLeft(md, "\n")
-	if strings.HasPrefix(trimmed, "# ") {
-		if idx := strings.Index(trimmed, "\n"); idx >= 0 {
-			heading := trimmed[:idx]
-			rest := strings.TrimLeft(trimmed[idx+1:], "\n")
-			return fmt.Sprintf("%s\n\n%s\n\n%s", heading, blockquote, rest)
+	if strings.HasPrefix(trimmed, sep+"\n") {
+		// Find the closing ---
+		rest := trimmed[len(sep)+1:]
+		if idx := strings.Index(rest, "\n"+sep); idx >= 0 {
+			before := trimmed[:len(sep)+1+idx]       // opening --- + fields
+			after := rest[idx+1+len(sep):]           // after closing ---
+			return before + fmt.Sprintf("\noriginal: %s\n", link) + sep + after
 		}
-		return fmt.Sprintf("%s\n\n%s", trimmed, blockquote)
 	}
-	return fmt.Sprintf("%s\n\n%s", blockquote, trimmed)
+	// No existing frontmatter — prepend a minimal block.
+	return fmt.Sprintf("---\noriginal: %s\n---\n\n%s", link, trimmed)
 }
 
 func (t *Target) renderCommitMessage(req targets.TargetRequest) (string, error) {

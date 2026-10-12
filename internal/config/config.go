@@ -98,8 +98,9 @@ type GitHubTargetConfig struct {
 // ArchiveConfig controls archiving of the original uploaded document into the
 // target repository.
 type ArchiveConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	Path    string `yaml:"path"` // repository sub-path for originals, e.g. "originals/"
+	Enabled           bool   `yaml:"enabled"`
+	Path              string `yaml:"path"`              // repository sub-path for originals, e.g. "originals/"
+	LinkInFrontmatter *bool  `yaml:"linkInFrontmatter"` // nil = default (true when archive enabled); false = opt-out
 }
 
 // FrontmatterConfig controls YAML frontmatter prepended to each transcription.
@@ -308,6 +309,13 @@ func postProcessTargets(cfg *Config) error {
 				cfg.Target.GitHub.Archive.Path = cfg.Target.GitHub.BasePath
 			}
 			cfg.Target.GitHub.Archive.Path = normalizePathPrefix(cfg.Target.GitHub.Archive.Path)
+			// Default to linking via frontmatter so archived originals are
+			// always discoverable. Users can opt out by setting
+			// linkInFrontmatter: false explicitly.
+			if cfg.Target.GitHub.Archive.LinkInFrontmatter == nil {
+				t := true
+				cfg.Target.GitHub.Archive.LinkInFrontmatter = &t
+			}
 		}
 	}
 	return nil

@@ -194,8 +194,7 @@ target:
     # -- producing "YYYYMMDD-HHMMSS-<slug>.md" with automatic collision avoidance.
     # -- The "ai" strategy does not require filenameTemplate.
     namingStrategy: "template"
-    # -- Archive the original uploaded document into the repository alongside
-    # -- the transcription, and add a relative Markdown link to it. Off by default.
+    # -- Archive the original uploaded document into the repository. Off by default.
     archive:
       # -- Enable archiving of the original document
       enabled: false
@@ -204,6 +203,11 @@ target:
       # -- (basePath); originals keep the transcription's filename but their own
       # -- extension. A Markdown original cannot share the transcription folder.
       path: "originals/"
+      # -- When true, adds an `original` field to the YAML frontmatter of the
+      # -- transcription pointing to the archived original. Has no effect when
+      # -- archive.enabled is false. Defaults to true so archiving always
+      # -- produces a discoverable link.
+      linkInFrontmatter: true
     # -- Prepend a YAML frontmatter block to each transcription with provenance
     # -- fields (source, source_hash, transcriptionDate). Off by default.
     frontmatter:
