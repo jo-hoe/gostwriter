@@ -90,6 +90,9 @@ func (t *Target) Post(ctx context.Context, req targets.TargetRequest) (targets.T
 	// Optionally archive the original document first, then link to it.
 	if t.cfg.Archive.Enabled && req.Original != nil {
 		originalPath := swapDirExt(mdPath, t.cfg.Archive.Path, req.Original.Extension)
+		if originalPath == mdPath {
+			return targets.TargetResult{}, fmt.Errorf("archive original would overwrite transcription at %q: choose a distinct github.archive.path or a non-Markdown original", mdPath)
+		}
 		if _, err := t.putContents(ctx, originalPath, req.Original.Content, commitMsg); err != nil {
 			return targets.TargetResult{}, fmt.Errorf("archive original: %w", err)
 		}

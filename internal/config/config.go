@@ -300,8 +300,12 @@ func postProcessTargets(cfg *Config) error {
 			cfg.Target.GitHub.NamingStrategy = "template"
 		}
 		if cfg.Target.GitHub.Archive.Enabled {
+			// When no archive path is given, co-locate originals in the same
+			// folder as the transcription (basePath). Originals keep the
+			// transcription's filename stem but their own extension, so they do
+			// not collide with the .md file.
 			if strings.TrimSpace(cfg.Target.GitHub.Archive.Path) == "" {
-				cfg.Target.GitHub.Archive.Path = "originals/"
+				cfg.Target.GitHub.Archive.Path = cfg.Target.GitHub.BasePath
 			}
 			cfg.Target.GitHub.Archive.Path = normalizePathPrefix(cfg.Target.GitHub.Archive.Path)
 		}
@@ -350,14 +354,11 @@ func validate(cfg *Config) error {
 		default:
 			return fmt.Errorf("github.namingStrategy must be \"template\", \"title\", or \"ai\", got %q", g.NamingStrategy)
 		}
-		if g.Archive.Enabled {
-			if strings.TrimSpace(g.Archive.Path) == "" {
-				return fmt.Errorf("github.archive.path is required when archive is enabled")
-			}
-			if g.Archive.Path == g.BasePath {
-				return fmt.Errorf("github.archive.path must differ from github.basePath")
-			}
-		}
+		// archive.path may be empty (co-locate with basePath, applied as a
+		// default above) or equal basePath; originals keep the transcription's
+		// stem but a different extension, so they do not collide with the .md.
+		// A same-folder original that is itself Markdown is rejected at archive
+		// time by the target, where the original's extension is known.
 	}
 	return nil
 }

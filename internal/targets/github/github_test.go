@@ -378,6 +378,66 @@ func TestPost_ArchiveEnabled_OriginalNil(t *testing.T) {
 	}
 }
 
+func TestPost_ArchiveSameFolderAsTranscription(t *testing.T) {
+	var puts []recordedPut
+	srv := newArchiveServer(&puts)
+	defer srv.Close()
+
+	// archive.path equal to basePath co-locates the original with the .md.
+	cfg := archiveTestConfig(srv.URL, true)
+	cfg.Archive.Path = "inbox/"
+	tg := newTestTarget(t, cfg, nil)
+	tg.WithHTTPClient(srv.Client())
+
+	_, err := tg.Post(context.Background(), targets.TargetRequest{
+		JobID:     "job-xyz",
+		Markdown:  "# Title\n\nbody",
+		Timestamp: time.Now().UTC(),
+		Original:  &targets.OriginalDocument{Content: []byte("%PDF"), Extension: ".pdf", MimeType: "application/pdf"},
+	})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+	if len(puts) != 2 {
+		t.Fatalf("expected 2 PUTs, got %d: %+v", len(puts), puts)
+	}
+	if !strings.HasSuffix(puts[0].Path, "/contents/inbox/job-xyz.pdf") {
+		t.Fatalf("original should sit in inbox/, got: %s", puts[0].Path)
+	}
+	if !strings.HasSuffix(puts[1].Path, "/contents/inbox/job-xyz.md") {
+		t.Fatalf("transcription should sit in inbox/, got: %s", puts[1].Path)
+	}
+	// A same-folder sibling link is just the bare filename.
+	if md := decodeContent(t, puts[1]); !strings.Contains(md, "> Original: [document](job-xyz.pdf)") {
+		t.Fatalf("markdown should link to sibling original:\n%s", md)
+	}
+}
+
+func TestPost_ArchiveSameFolderMarkdownOriginalRejected(t *testing.T) {
+	var puts []recordedPut
+	srv := newArchiveServer(&puts)
+	defer srv.Close()
+
+	// A Markdown original co-located with the transcription would overwrite it.
+	cfg := archiveTestConfig(srv.URL, true)
+	cfg.Archive.Path = "inbox/"
+	tg := newTestTarget(t, cfg, nil)
+	tg.WithHTTPClient(srv.Client())
+
+	_, err := tg.Post(context.Background(), targets.TargetRequest{
+		JobID:     "job-xyz",
+		Markdown:  "# Title\n\nbody",
+		Timestamp: time.Now().UTC(),
+		Original:  &targets.OriginalDocument{Content: []byte("# raw"), Extension: ".md"},
+	})
+	if err == nil {
+		t.Fatal("expected error when archiving a .md original into the transcription folder")
+	}
+	if len(puts) != 0 {
+		t.Fatalf("no PUT should occur when the archive path would overwrite the transcription, got %d", len(puts))
+	}
+}
+
 func TestSwapDirExt(t *testing.T) {
 	cases := []struct {
 		repoPath, newDir, newExt, want string
