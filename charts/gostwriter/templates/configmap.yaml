@@ -59,6 +59,8 @@ data:
         archive:
           enabled: {{ .Values.target.github.archive.enabled }}
           path: {{ .Values.target.github.archive.path | quote }}
+        frontmatter:
+          enabled: {{ .Values.target.github.frontmatter.enabled }}
         auth:
           token: {{ .Values.target.github.auth.token | quote }}
     {{- end }}

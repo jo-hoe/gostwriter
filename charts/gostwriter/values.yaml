@@ -196,6 +196,11 @@ target:
       enabled: false
       # -- Repository sub-path where originals are committed
       path: "originals/"
+    # -- Prepend a YAML frontmatter block to each transcription with provenance
+    # -- fields (source, source_hash, transcriptionDate). Off by default.
+    frontmatter:
+      # -- Enable frontmatter generation
+      enabled: false
     auth:
       # -- Personal access token for GitHub REST API
       token: ""
