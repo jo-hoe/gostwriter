@@ -12,12 +12,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jo-hoe/gostwriter/internal/common"
 	"github.com/jo-hoe/gostwriter/internal/config"
 	"github.com/jo-hoe/gostwriter/internal/jobs"
 	"github.com/jo-hoe/gostwriter/internal/llm"
+	"github.com/jo-hoe/gostwriter/internal/naming"
 	"github.com/jo-hoe/gostwriter/internal/targets"
 )
 
@@ -66,7 +68,7 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 		return err
 	}
 
-	md, err := w.LLM.TranscribeImage(ctx, bytes.NewReader(data), job.MimeType)
+	md, conv, err := w.LLM.TranscribeImage(ctx, bytes.NewReader(data), job.MimeType)
 	if err != nil {
 		w.finishWithError(job.ID, fmt.Errorf("llm transcribe: %w", err))
 		return err
@@ -100,6 +102,15 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 		md = prependFrontmatter(md, job, data)
 	}
 
+	// When the AI naming strategy is selected, ask the LLM for a filename slug
+	// by continuing the transcription conversation (reusing cached context).
+	var suggestedSlug *string
+	if w.Cfg.Target.GitHub.NamingStrategy == "ai" {
+		if slug := w.suggestFilenameSlug(ctx, job.ID, conv); slug != "" {
+			suggestedSlug = &slug
+		}
+	}
+
 	// Posting stage
 	startPost := time.Now().UTC()
 	if err := w.Store.UpdateStage(job.ID, jobs.StagePosting, &startPost); err != nil {
@@ -120,6 +131,7 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 		JobID:          job.ID,
 		Markdown:       md,
 		SuggestedTitle: effectiveTitle,
+		SuggestedSlug:  suggestedSlug,
 		Metadata:       job.Metadata,
 		Timestamp:      time.Now().UTC(),
 	}
@@ -177,6 +189,37 @@ func (w *Worker) finishWithError(jobID string, err error) {
 	if w.Log != nil {
 		w.Log.Error("job failed", "job_id", jobID, "error", err)
 	}
+}
+
+// slugMaxLen caps the length of an AI-suggested filename slug.
+const slugMaxLen = 60
+
+// suggestFilenameSlug asks the LLM for a filename slug by continuing the
+// transcription conversation, then sanitises it. It returns an empty string on
+// any failure (unsupported client, LLM error, or empty slug) so the caller can
+// fall back to the JobID-based name.
+func (w *Worker) suggestFilenameSlug(ctx context.Context, jobID string, conv llm.Conversation) string {
+	advisor, ok := w.LLM.(llm.FilenameAdvisor)
+	if !ok || conv == nil {
+		return ""
+	}
+
+	raw, err := advisor.SuggestFilename(ctx, conv)
+	if err != nil {
+		if w.Log != nil {
+			w.Log.Warn("filename suggestion failed, falling back", "job_id", jobID, "err", err)
+		}
+		return ""
+	}
+
+	slug := naming.Slugify(raw)
+	if slug == "untitled" {
+		return ""
+	}
+	if len(slug) > slugMaxLen {
+		slug = strings.TrimRight(slug[:slugMaxLen], "-")
+	}
+	return slug
 }
 
 type callbackPayload struct {

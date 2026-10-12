@@ -24,7 +24,7 @@ func NewTitleNamer(basePath, extension string) *TitleNamer {
 func (n *TitleNamer) Name(req NamingRequest) (string, error) {
 	base := req.JobID
 	if req.SuggestedTitle != nil && strings.TrimSpace(*req.SuggestedTitle) != "" {
-		base = slugify(*req.SuggestedTitle)
+		base = Slugify(*req.SuggestedTitle)
 	}
 	name := base + n.extension
 	if n.basePath != "" {
@@ -35,8 +35,8 @@ func (n *TitleNamer) Name(req NamingRequest) (string, error) {
 
 var reNonWord = regexp.MustCompile(`-{2,}`)
 
-// slugify converts a title to a lowercase, filename-safe slug.
-func slugify(s string) string {
+// Slugify converts a title to a lowercase, filename-safe slug.
+func Slugify(s string) string {
 	s = strings.TrimSpace(s)
 	var b strings.Builder
 	for _, r := range s {

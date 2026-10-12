@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/jo-hoe/gostwriter/internal/common"
 	"github.com/jo-hoe/gostwriter/internal/config"
 	"github.com/jo-hoe/gostwriter/internal/jobs"
+	"github.com/jo-hoe/gostwriter/internal/llm"
 	"github.com/jo-hoe/gostwriter/internal/targets"
 )
 
@@ -95,19 +97,31 @@ type llmMock struct {
 	generatedTitle string
 	titleErr       error
 	titleCalled    bool
+	suggestedSlug  string
+	slugErr        error
+	slugCalled     bool
 }
 
-func (m *llmMock) TranscribeImage(ctx context.Context, r io.Reader, mime string) (string, error) {
+type llmConv struct{}
+
+func (llmConv) Provider() string { return "mock" }
+
+func (m *llmMock) TranscribeImage(ctx context.Context, r io.Reader, mime string) (string, llm.Conversation, error) {
 	if m.err != nil {
-		return "", m.err
+		return "", nil, m.err
 	}
 	_, _ = io.Copy(io.Discard, r)
-	return m.out, nil
+	return m.out, llmConv{}, nil
 }
 
 func (m *llmMock) GenerateTitle(_ context.Context, _ string) (string, error) {
 	m.titleCalled = true
 	return m.generatedTitle, m.titleErr
+}
+
+func (m *llmMock) SuggestFilename(_ context.Context, _ llm.Conversation) (string, error) {
+	m.slugCalled = true
+	return m.suggestedSlug, m.slugErr
 }
 
 type capturingTarget struct {
@@ -455,5 +469,111 @@ func TestWorker_OriginalNil_WhenArchiveDisabled(t *testing.T) {
 	}
 	if tgt.lastReq.Original != nil {
 		t.Fatal("expected Original to be nil when archive disabled")
+	}
+}
+
+func makeWorkerWithNaming(t *testing.T, llmClient *llmMock, strategy string) (*Worker, *capturingTarget, jobs.Store) {
+	t.Helper()
+	store := newMemStore()
+	tgt := &capturingTarget{name: "github"}
+	reg := targets.NewRegistry()
+	reg.Add(tgt)
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			CallbackRetries: 1,
+			CallbackBackoff: 10 * time.Millisecond,
+			StorageDir:      t.TempDir(),
+			MaxUploadSize:   config.ByteSize(10 * 1024 * 1024),
+		},
+		Target: config.TargetsConfig{
+			GitHub: config.GitHubTargetConfig{
+				Enabled:        true,
+				NamingStrategy: strategy,
+			},
+		},
+	}
+	return New(discardLogger(), cfg, store, llmClient, reg), tgt, store
+}
+
+func runAINamingJob(t *testing.T, llmClient *llmMock) *capturingTarget {
+	t.Helper()
+	worker, tgt, store := makeWorkerWithNaming(t, llmClient, "ai")
+	job := jobs.Job{
+		ID: "jn", ImagePath: makeTempImage(t), MimeType: common.MimeImagePNG,
+		TargetName: "github", Stage: jobs.StageQueued, CreatedAt: time.Now().UTC(),
+	}
+	_ = store.CreateJob(&job)
+	if err := worker.Process(context.Background(), jobs.WorkItem{Job: job}); err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	return tgt
+}
+
+func TestWorker_AINaming_PropagatesSanitisedSlug(t *testing.T) {
+	llmClient := &llmMock{out: "body", suggestedSlug: "Invoice November 2024!"}
+	tgt := runAINamingJob(t, llmClient)
+
+	if !llmClient.slugCalled {
+		t.Fatal("expected SuggestFilename to be called for ai strategy")
+	}
+	if tgt.lastReq.SuggestedSlug == nil {
+		t.Fatal("expected SuggestedSlug to be propagated")
+	}
+	if *tgt.lastReq.SuggestedSlug != "invoice-november-2024" {
+		t.Fatalf("slug not sanitised: %q", *tgt.lastReq.SuggestedSlug)
+	}
+}
+
+func TestWorker_AINaming_CapsLongSlug(t *testing.T) {
+	long := strings.Repeat("word ", 40) // far exceeds slugMaxLen
+	llmClient := &llmMock{out: "body", suggestedSlug: long}
+	tgt := runAINamingJob(t, llmClient)
+
+	if tgt.lastReq.SuggestedSlug == nil {
+		t.Fatal("expected SuggestedSlug to be propagated")
+	}
+	got := *tgt.lastReq.SuggestedSlug
+	if len(got) > slugMaxLen {
+		t.Fatalf("slug not capped: len=%d %q", len(got), got)
+	}
+	if strings.HasSuffix(got, "-") {
+		t.Fatalf("capped slug must not end with hyphen: %q", got)
+	}
+}
+
+func TestWorker_AINaming_EmptySlugFallsBack(t *testing.T) {
+	llmClient := &llmMock{out: "body", suggestedSlug: "   "}
+	tgt := runAINamingJob(t, llmClient)
+
+	if tgt.lastReq.SuggestedSlug != nil {
+		t.Fatalf("expected nil SuggestedSlug (fallback to JobID), got %q", *tgt.lastReq.SuggestedSlug)
+	}
+}
+
+func TestWorker_AINaming_LLMErrorFallsBack(t *testing.T) {
+	llmClient := &llmMock{out: "body", slugErr: errors.New("llm down")}
+	tgt := runAINamingJob(t, llmClient)
+
+	if tgt.lastReq.SuggestedSlug != nil {
+		t.Fatalf("expected nil SuggestedSlug on LLM error, got %q", *tgt.lastReq.SuggestedSlug)
+	}
+}
+
+func TestWorker_AINaming_SkippedForNonAIStrategy(t *testing.T) {
+	llmClient := &llmMock{out: "body", suggestedSlug: "should-not-be-used"}
+	worker, tgt, store := makeWorkerWithNaming(t, llmClient, "title")
+	job := jobs.Job{
+		ID: "jt", ImagePath: makeTempImage(t), MimeType: common.MimeImagePNG,
+		TargetName: "github", Stage: jobs.StageQueued, CreatedAt: time.Now().UTC(),
+	}
+	_ = store.CreateJob(&job)
+	if err := worker.Process(context.Background(), jobs.WorkItem{Job: job}); err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	if llmClient.slugCalled {
+		t.Fatal("SuggestFilename must not be called when strategy != ai")
+	}
+	if tgt.lastReq.SuggestedSlug != nil {
+		t.Fatalf("expected nil SuggestedSlug for non-ai strategy, got %q", *tgt.lastReq.SuggestedSlug)
 	}
 }

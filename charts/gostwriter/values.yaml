@@ -188,6 +188,10 @@ target:
     # -- "template" uses filenameTemplate (default behaviour).
     # -- "title" uses the slugified SuggestedTitle as the filename base,
     # -- with automatic collision avoidance (appends -1, -2, … as needed).
+    # -- "ai" asks the LLM for a descriptive slug (reusing the transcription
+    # -- conversation for prompt-cache reuse) and prepends a full timestamp,
+    # -- producing "YYYYMMDD-HHMMSS-<slug>.md" with automatic collision avoidance.
+    # -- The "ai" strategy does not require filenameTemplate.
     namingStrategy: "template"
     # -- Archive the original uploaded document into the repository alongside
     # -- the transcription, and add a relative Markdown link to it. Off by default.

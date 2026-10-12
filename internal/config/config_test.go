@@ -221,6 +221,83 @@ func TestLoad_NamingStrategyValidation(t *testing.T) {
 	}
 }
 
+func TestLoad_NamingStrategyAIAccepted(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	extra := `    namingStrategy: "ai"
+`
+	if err := os.WriteFile(path, []byte(makeMinimalGitHubYAML(dir, extra)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Target.GitHub.NamingStrategy != "ai" {
+		t.Fatalf("expected namingStrategy=ai, got %q", cfg.Target.GitHub.NamingStrategy)
+	}
+}
+
+func TestLoad_NamingStrategyAIAllowsMissingTemplate(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	yaml := `
+server:
+  address: ":0"
+  storageDir: "` + escapeBackslashes(dir) + `"
+llm:
+  provider: "mock"
+target:
+  github:
+    enabled: true
+    repositoryOwner: "org"
+    repositoryName: "repo"
+    branch: "main"
+    namingStrategy: "ai"
+    commitMessageTemplate: "Add {{ .JobID }}"
+    auth:
+      token: "tok"
+`
+	if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err != nil {
+		t.Fatalf("ai strategy should not require filenameTemplate: %v", err)
+	}
+}
+
+func TestLoad_NonAIStrategyRequiresTemplate(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	yaml := `
+server:
+  address: ":0"
+  storageDir: "` + escapeBackslashes(dir) + `"
+llm:
+  provider: "mock"
+target:
+  github:
+    enabled: true
+    repositoryOwner: "org"
+    repositoryName: "repo"
+    branch: "main"
+    namingStrategy: "template"
+    commitMessageTemplate: "Add {{ .JobID }}"
+    auth:
+      token: "tok"
+`
+	if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error: template strategy requires filenameTemplate")
+	}
+	if !strings.Contains(err.Error(), "filenameTemplate") {
+		t.Fatalf("error should mention filenameTemplate, got: %v", err)
+	}
+}
+
 func TestLoad_ArchiveDisabledByDefault(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
