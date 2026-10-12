@@ -19,7 +19,7 @@ If the client sends `Prefer: respond-async`, the request is processed asynchrono
 - Prerequisites:
   - Docker (or Go 1.22+ if running from source)
   - GitHub Personal Access Token (PAT) with repo write access (for the GitHub target)
-  - Optional: an OpenAI-compatible AI Proxy if using `llm.provider: aiproxy` (defaults to mock otherwise)
+  - Optional: an OpenAI-compatible endpoint (an ai-proxy reverse proxy or api.openai.com) if using `llm.provider: openai` (defaults to mock otherwise)
 
 ## Configure
 
@@ -31,7 +31,7 @@ If the client sends `Prefer: respond-async`, the request is processed asynchrono
   - Provide `target.github.auth.token` (either paste the PAT or use `${GITHUB_TOKEN}`)
   - Choose LLM:
     - Mock (default): `llm.provider: "mock"` works without external services
-    - AI Proxy: set `llm.provider: "aiproxy"`, `llm.aiproxy.baseUrl`, and `llm.aiproxy.apiKey` (or `${AIPROXY_API_KEY}`)
+    - OpenAI-compatible: set `llm.provider: "openai"`, `llm.openai.baseUrl` (an ai-proxy reverse proxy or `https://api.openai.com`), and `llm.openai.apiKey` (or `${OPENAI_API_KEY}`)
 - Example snippet:
 
   ```yaml
