@@ -371,6 +371,43 @@ func TestLoad_ArchivePathEqualsBasePathAccepted(t *testing.T) {
 	}
 }
 
+func TestLoad_ArchiveLinkInFrontmatterDefaultsTrue(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	extra := `    archive:
+      enabled: true
+`
+	if err := os.WriteFile(path, []byte(makeMinimalGitHubYAML(dir, extra)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Target.GitHub.Archive.LinkInFrontmatter == nil || !*cfg.Target.GitHub.Archive.LinkInFrontmatter {
+		t.Fatal("archive.linkInFrontmatter should default to true when archive is enabled")
+	}
+}
+
+func TestLoad_ArchiveLinkInFrontmatterExplicitFalse(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	extra := `    archive:
+      enabled: true
+      linkInFrontmatter: false
+`
+	if err := os.WriteFile(path, []byte(makeMinimalGitHubYAML(dir, extra)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Target.GitHub.Archive.LinkInFrontmatter == nil || *cfg.Target.GitHub.Archive.LinkInFrontmatter {
+		t.Fatal("archive.linkInFrontmatter should be false when explicitly set to false")
+	}
+}
+
 func TestLoad_UnknownProviderRejected(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
