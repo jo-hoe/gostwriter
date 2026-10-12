@@ -3,6 +3,7 @@ package processor
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -92,6 +93,11 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 	// Optionally prepend title as Markdown H1.
 	if effectiveTitle != nil && *effectiveTitle != "" {
 		md = fmt.Sprintf("# %s\n\n%s", *effectiveTitle, md)
+	}
+
+	// Optionally prepend YAML frontmatter with provenance fields.
+	if w.Cfg.Target.GitHub.Frontmatter.Enabled {
+		md = prependFrontmatter(md, job, data)
 	}
 
 	// Posting stage
@@ -237,4 +243,26 @@ func (w *Worker) postJSON(ctx context.Context, url string, payload any) error {
 		return fmt.Errorf("callback status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// prependFrontmatter prepends a YAML frontmatter block to the markdown.
+// The source field comes from job.Metadata["source"], falling back to the
+// image filename. source_hash is the hex-encoded SHA-256 of the raw image
+// bytes. transcribed is the current UTC time in RFC 3339 format.
+func prependFrontmatter(md string, job jobs.Job, imageData []byte) string {
+	source := filepath.Base(job.ImagePath)
+	if s, ok := job.Metadata["source"]; ok {
+		if str, ok := s.(string); ok && str != "" {
+			source = str
+		}
+	}
+
+	sum := sha256.Sum256(imageData)
+	hash := fmt.Sprintf("%x", sum)
+
+	transcribed := time.Now().UTC().Format(time.RFC3339)
+
+	fm := fmt.Sprintf("---\nsource: %s\nsource_hash: %s\ntranscriptionDate: %s\n---\n\n",
+		source, hash, transcribed)
+	return fm + md
 }

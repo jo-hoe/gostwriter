@@ -89,6 +89,9 @@ type GitHubTargetConfig struct {
 	// Archive, when enabled, commits the original uploaded document to the
 	// repository alongside the transcription and links to it from the Markdown.
 	Archive ArchiveConfig `yaml:"archive"`
+	// Frontmatter, when enabled, prepends a YAML frontmatter block to each
+	// transcription with provenance fields (source, source_hash, transcribed).
+	Frontmatter FrontmatterConfig `yaml:"frontmatter"`
 }
 
 // ArchiveConfig controls archiving of the original uploaded document into the
@@ -96,6 +99,11 @@ type GitHubTargetConfig struct {
 type ArchiveConfig struct {
 	Enabled bool   `yaml:"enabled"`
 	Path    string `yaml:"path"` // repository sub-path for originals, e.g. "originals/"
+}
+
+// FrontmatterConfig controls YAML frontmatter prepended to each transcription.
+type FrontmatterConfig struct {
+	Enabled bool `yaml:"enabled"`
 }
 
 // GitHubAuthConfig holds token-based auth (Personal Access Token).
