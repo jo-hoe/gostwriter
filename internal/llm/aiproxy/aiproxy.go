@@ -30,8 +30,21 @@ var defaultTitleSystemPrompt string
 //go:embed title_instructions.txt
 var defaultTitleInstructions string
 
+//go:embed filename_instructions.txt
+var defaultFilenameInstructions string
+
 var _ llm.Client = (*Client)(nil)
 var _ llm.TitleGenerator = (*Client)(nil)
+var _ llm.FilenameAdvisor = (*Client)(nil)
+
+// conversation is the aiproxy implementation of llm.Conversation. It carries
+// the full message history of a completed exchange so follow-up calls can
+// continue it, letting the provider reuse cached prompt context.
+type conversation struct {
+	messages []chatMessage
+}
+
+func (*conversation) Provider() string { return "aiproxy" }
 
 const (
 	// Headers
@@ -112,18 +125,26 @@ func newHTTPClient(timeout time.Duration) *http.Client {
 
 // TranscribeImage sends a chat completion request instructing the model to transcribe the document into Markdown.
 // Images are sent as an "image_url" content part; PDFs are sent as a "file" content part.
-func (c *Client) TranscribeImage(ctx context.Context, r io.Reader, mime string) (string, error) {
+func (c *Client) TranscribeImage(ctx context.Context, r io.Reader, mime string) (string, llm.Conversation, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
-		return "", fmt.Errorf("read document: %w", err)
+		return "", nil, fmt.Errorf("read document: %w", err)
 	}
 	if len(data) == 0 {
-		return "", fmt.Errorf("document is empty")
+		return "", nil, fmt.Errorf("document is empty")
 	}
 
 	part := buildDocumentPart(mime, data)
 	reqBody := c.buildRequestBody(part)
-	return c.doCompletion(ctx, reqBody)
+	content, err := c.doCompletion(ctx, reqBody)
+	if err != nil {
+		return "", nil, err
+	}
+
+	conv := &conversation{
+		messages: append(reqBody.Messages, chatMessage{Role: RoleAssistant, Content: content}),
+	}
+	return content, conv, nil
 }
 
 // buildDocumentPart returns the user content part for the given document, selecting
@@ -173,6 +194,43 @@ func (c *Client) GenerateTitle(ctx context.Context, markdown string) (string, er
 	// Strip surrounding quotes the model sometimes adds.
 	title = strings.Trim(strings.TrimSpace(title), `"'`)
 	return strings.TrimSpace(title), nil
+}
+
+// SuggestFilename satisfies llm.FilenameAdvisor. It continues the transcription
+// conversation with a follow-up instruction asking for a filename slug, which
+// lets the provider reuse the cached transcription context.
+func (c *Client) SuggestFilename(ctx context.Context, conv llm.Conversation) (string, error) {
+	prior, ok := conv.(*conversation)
+	if !ok {
+		return "", fmt.Errorf("unsupported conversation type %T", conv)
+	}
+
+	instr := strings.TrimSpace(defaultFilenameInstructions)
+	msgs := append(prior.messages, chatMessage{Role: RoleUser, Content: instr})
+
+	reqBody := chatCompletionRequest{
+		Model:    c.model,
+		Messages: msgs,
+		Stream:   false,
+	}
+	if c.temperature != nil {
+		reqBody.Temperature = c.temperature
+	}
+	// Slugs are short; use a small token budget unless the user overrides it.
+	if c.maxTokens != nil {
+		reqBody.MaxTokens = c.maxTokens
+	} else {
+		n := 32
+		reqBody.MaxTokens = &n
+	}
+
+	slug, err := c.doCompletion(ctx, reqBody)
+	if err != nil {
+		return "", err
+	}
+	// Strip surrounding quotes the model sometimes adds.
+	slug = strings.Trim(strings.TrimSpace(slug), `"'`)
+	return strings.TrimSpace(slug), nil
 }
 
 // doCompletion executes a chat completions request and returns the first choice content.

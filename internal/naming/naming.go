@@ -10,6 +10,7 @@ type NamingRequest struct {
 	JobID          string
 	Timestamp      time.Time
 	SuggestedTitle *string
+	SuggestedSlug  *string
 	Metadata       map[string]any
 	BasePath       string // normalised path prefix (trailing slash), applied by each namer
 	Extension      string // e.g. ".md"

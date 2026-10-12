@@ -16,6 +16,7 @@ type TargetRequest struct {
 	JobID            string
 	Markdown         string
 	SuggestedTitle   *string
+	SuggestedSlug    *string
 	Metadata         map[string]any
 	Timestamp        time.Time
 	FilenameTemplate string

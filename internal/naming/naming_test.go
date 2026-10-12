@@ -142,7 +142,7 @@ func TestSlugify(t *testing.T) {
 	// Override the café expectation: 'é' IS a letter (unicode.IsLetter), so it stays as 'é' lowercased.
 	cases[3] = struct{ in, want string }{"café", "café"}
 	for _, c := range cases {
-		got := slugify(c.in)
+		got := Slugify(c.in)
 		if got != c.want {
 			t.Errorf("slugify(%q) = %q, want %q", c.in, got, c.want)
 		}

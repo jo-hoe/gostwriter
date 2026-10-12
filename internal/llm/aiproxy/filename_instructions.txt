@@ -1,0 +1,1 @@
+Based on the document you just transcribed, suggest a short filename slug (2-5 words, lowercase, hyphens only, no extension, no path). Reply with only the slug and nothing else.

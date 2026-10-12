@@ -60,7 +60,7 @@ func TestAIProxy_TranscribeImage_Success(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	out, err := c.TranscribeImage(ctx, bytes.NewBuffer([]byte("imgdata")), "image/png")
+	out, _, err := c.TranscribeImage(ctx, bytes.NewBuffer([]byte("imgdata")), "image/png")
 	if err != nil {
 		t.Fatalf("TranscribeImage error: %v", err)
 	}
@@ -109,7 +109,7 @@ func captureUserParts(t *testing.T, mime string, data []byte) []any {
 	defer ts.Close()
 
 	c := New(config.AIProxySettings{BaseURL: ts.URL, Model: "gpt-5"})
-	if _, err := c.TranscribeImage(context.Background(), bytes.NewReader(data), mime); err != nil {
+	if _, _, err := c.TranscribeImage(context.Background(), bytes.NewReader(data), mime); err != nil {
 		t.Fatalf("TranscribeImage: %v", err)
 	}
 	parts, ok := seenBody.Messages[1].Content.([]any)
@@ -176,7 +176,7 @@ func TestAIProxy_TranscribeImage_Non200(t *testing.T) {
 	}
 	c := New(cfg)
 
-	_, err := c.TranscribeImage(context.Background(), bytes.NewBuffer([]byte("x")), "image/png")
+	_, _, err := c.TranscribeImage(context.Background(), bytes.NewBuffer([]byte("x")), "image/png")
 	if err == nil {
 		t.Fatalf("expected error for non-200 response")
 	}
@@ -194,7 +194,7 @@ func TestAIProxy_TranscribeImage_EmptyImage(t *testing.T) {
 	}
 	c := New(cfg)
 
-	_, err := c.TranscribeImage(context.Background(), bytes.NewBuffer(nil), "image/png")
+	_, _, err := c.TranscribeImage(context.Background(), bytes.NewBuffer(nil), "image/png")
 	if err == nil {
 		t.Fatalf("expected error for empty image")
 	}
@@ -276,6 +276,85 @@ func TestAIProxy_GenerateTitle_Non200(t *testing.T) {
 	}
 }
 
+func TestAIProxy_TranscribeImage_ReturnsConversation(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(chatCompletionResponse{
+			Choices: []chatCompletionChoice{{Message: responseMsg{Content: "transcribed"}}},
+		})
+	}))
+	defer ts.Close()
+
+	c := New(config.AIProxySettings{BaseURL: ts.URL, Model: "gpt-5"})
+	_, conv, err := c.TranscribeImage(context.Background(), bytes.NewReader([]byte("img")), "image/png")
+	if err != nil {
+		t.Fatalf("TranscribeImage: %v", err)
+	}
+	if conv == nil {
+		t.Fatal("expected non-nil conversation")
+	}
+	if conv.Provider() != "aiproxy" {
+		t.Fatalf("unexpected provider: %q", conv.Provider())
+	}
+}
+
+func TestAIProxy_SuggestFilename_ContinuesConversation(t *testing.T) {
+	var secondBody chatCompletionRequest
+	var calls int
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 2 {
+			_ = json.NewDecoder(r.Body).Decode(&secondBody)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		content := "transcribed"
+		if calls == 2 {
+			content = `"invoice-november"`
+		}
+		_ = json.NewEncoder(w).Encode(chatCompletionResponse{
+			Choices: []chatCompletionChoice{{Message: responseMsg{Content: content}}},
+		})
+	}))
+	defer ts.Close()
+
+	c := New(config.AIProxySettings{BaseURL: ts.URL, Model: "gpt-5"})
+	_, conv, err := c.TranscribeImage(context.Background(), bytes.NewReader([]byte("img")), "image/png")
+	if err != nil {
+		t.Fatalf("TranscribeImage: %v", err)
+	}
+
+	slug, err := c.SuggestFilename(context.Background(), conv)
+	if err != nil {
+		t.Fatalf("SuggestFilename: %v", err)
+	}
+	if slug != "invoice-november" {
+		t.Fatalf("unexpected slug (quotes should be stripped): %q", slug)
+	}
+	// The follow-up call must reuse the transcription history: system + user
+	// (instructions+document) + assistant reply + new filename instruction.
+	if len(secondBody.Messages) != 4 {
+		t.Fatalf("expected 4 messages continuing the conversation, got %d", len(secondBody.Messages))
+	}
+	if secondBody.Messages[2].Role != RoleAssistant {
+		t.Fatalf("expected assistant reply retained at index 2, got %q", secondBody.Messages[2].Role)
+	}
+	if secondBody.Messages[3].Role != RoleUser {
+		t.Fatalf("expected filename instruction as final user turn, got %q", secondBody.Messages[3].Role)
+	}
+}
+
+func TestAIProxy_SuggestFilename_RejectsForeignConversation(t *testing.T) {
+	c := New(config.AIProxySettings{BaseURL: "http://example.invalid", Model: "gpt-5"})
+	_, err := c.SuggestFilename(context.Background(), foreignConversation{})
+	if err == nil {
+		t.Fatal("expected error for conversation from another provider")
+	}
+}
+
+type foreignConversation struct{}
+
+func (foreignConversation) Provider() string { return "other" }
+
 func TestAIProxy_TranscribeImage_ContextCancel(t *testing.T) {
 	var started int32
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -293,7 +372,7 @@ func TestAIProxy_TranscribeImage_ContextCancel(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	_, err := c.TranscribeImage(ctx, bytes.NewBuffer([]byte("data")), "image/png")
+	_, _, err := c.TranscribeImage(ctx, bytes.NewBuffer([]byte("data")), "image/png")
 	if err == nil {
 		t.Fatalf("expected context cancellation error")
 	}

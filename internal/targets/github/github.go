@@ -63,6 +63,7 @@ func (t *Target) Post(ctx context.Context, req targets.TargetRequest) (targets.T
 		JobID:          req.JobID,
 		Timestamp:      req.Timestamp,
 		SuggestedTitle: req.SuggestedTitle,
+		SuggestedSlug:  req.SuggestedSlug,
 		Metadata:       req.Metadata,
 		BasePath:       t.cfg.BasePath,
 		Extension:      ".md",

@@ -84,7 +84,7 @@ type GitHubTargetConfig struct {
 	// when the caller did not supply one.
 	GenerateTitle bool `yaml:"generateTitle"`
 	// NamingStrategy selects the FileNamer implementation.
-	// Valid values: "template" (default), "title"
+	// Valid values: "template" (default), "title", "ai"
 	NamingStrategy string `yaml:"namingStrategy"`
 	// Archive, when enabled, commits the original uploaded document to the
 	// repository alongside the transcription and links to it from the Markdown.
@@ -326,7 +326,7 @@ func validate(cfg *Config) error {
 		if strings.TrimSpace(g.Branch) == "" {
 			return fmt.Errorf("github.branch is required")
 		}
-		if strings.TrimSpace(g.FilenameTemplate) == "" {
+		if g.NamingStrategy != "ai" && strings.TrimSpace(g.FilenameTemplate) == "" {
 			return fmt.Errorf("github.filenameTemplate is required")
 		}
 		if strings.TrimSpace(g.CommitMessageTemplate) == "" {
@@ -336,10 +336,10 @@ func validate(cfg *Config) error {
 			return fmt.Errorf("github.auth.token is required")
 		}
 		switch g.NamingStrategy {
-		case "template", "title":
+		case "template", "title", "ai":
 			// valid
 		default:
-			return fmt.Errorf("github.namingStrategy must be \"template\" or \"title\", got %q", g.NamingStrategy)
+			return fmt.Errorf("github.namingStrategy must be \"template\", \"title\", or \"ai\", got %q", g.NamingStrategy)
 		}
 		if g.Archive.Enabled {
 			if strings.TrimSpace(g.Archive.Path) == "" {
