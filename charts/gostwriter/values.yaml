@@ -199,7 +199,10 @@ target:
     archive:
       # -- Enable archiving of the original document
       enabled: false
-      # -- Repository sub-path where originals are committed
+      # -- Repository sub-path where originals are committed. Leave empty ("")
+      # -- to co-locate originals in the same folder as the transcription
+      # -- (basePath); originals keep the transcription's filename but their own
+      # -- extension. A Markdown original cannot share the transcription folder.
       path: "originals/"
     # -- Prepend a YAML frontmatter block to each transcription with provenance
     # -- fields (source, source_hash, transcriptionDate). Off by default.

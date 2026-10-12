@@ -85,7 +85,7 @@ Helm chart for deploying Gostwriter
 | target.github.apiBaseUrl | string | `"https://api.github.com"` | Optional override for the GitHub API base URL (e.g., for GH Enterprise) |
 | target.github.archive | object | `{"enabled":false,"path":"originals/"}` | the transcription, and add a relative Markdown link to it. Off by default. |
 | target.github.archive.enabled | bool | `false` | Enable archiving of the original document |
-| target.github.archive.path | string | `"originals/"` | Repository sub-path where originals are committed |
+| target.github.archive.path | string | `"originals/"` | Repository sub-path where originals are committed. Leave empty ("") to co-locate originals in the same folder as the transcription (basePath); originals keep the transcription's filename but their own extension. A Markdown original cannot share the transcription folder. |
 | target.github.auth.token | string | `""` | Personal access token for GitHub REST API |
 | target.github.authorEmail | string | `"bot@example.com"` | Commit author email used for the commit metadata |
 | target.github.authorName | string | `"Gostwriter Bot"` | Commit author name used for the commit metadata |

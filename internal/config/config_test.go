@@ -313,10 +313,11 @@ func TestLoad_ArchiveDisabledByDefault(t *testing.T) {
 	}
 }
 
-func TestLoad_ArchiveEnabledDefaultsPath(t *testing.T) {
+func TestLoad_ArchiveEnabledDefaultsToBasePath(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	extra := `    archive:
+	extra := `    basePath: "inbox/"
+    archive:
       enabled: true
 `
 	if err := os.WriteFile(path, []byte(makeMinimalGitHubYAML(dir, extra)), 0o600); err != nil {
@@ -326,8 +327,8 @@ func TestLoad_ArchiveEnabledDefaultsPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Target.GitHub.Archive.Path != "originals/" {
-		t.Fatalf("expected default archive path originals/, got %q", cfg.Target.GitHub.Archive.Path)
+	if cfg.Target.GitHub.Archive.Path != "inbox/" {
+		t.Fatalf("expected archive path to default to basePath inbox/, got %q", cfg.Target.GitHub.Archive.Path)
 	}
 }
 
@@ -350,7 +351,7 @@ func TestLoad_ArchivePathNormalized(t *testing.T) {
 	}
 }
 
-func TestLoad_ArchivePathEqualsBasePathRejected(t *testing.T) {
+func TestLoad_ArchivePathEqualsBasePathAccepted(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
 	extra := `    basePath: "inbox/"
@@ -361,12 +362,12 @@ func TestLoad_ArchivePathEqualsBasePathRejected(t *testing.T) {
 	if err := os.WriteFile(path, []byte(makeMinimalGitHubYAML(dir, extra)), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Load(path)
-	if err == nil {
-		t.Fatal("expected error when archive.path equals basePath")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("archive.path equal to basePath should be accepted: %v", err)
 	}
-	if !strings.Contains(err.Error(), "archive.path") {
-		t.Fatalf("error should mention archive.path, got: %v", err)
+	if cfg.Target.GitHub.Archive.Path != "inbox/" {
+		t.Fatalf("expected archive path inbox/, got %q", cfg.Target.GitHub.Archive.Path)
 	}
 }
 
