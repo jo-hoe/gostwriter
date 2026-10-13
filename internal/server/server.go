@@ -1,3 +1,4 @@
+// Package server implements the HTTP API for gostwriter.
 package server
 
 import (
@@ -21,6 +22,7 @@ import (
 	"github.com/jo-hoe/gostwriter/internal/util"
 )
 
+// Service holds the dependencies for the HTTP handlers.
 type Service struct {
 	Log       *slog.Logger
 	Cfg       *config.Config
@@ -34,7 +36,7 @@ type Service struct {
 // NewHTTPServer builds the http.Server with routes and middleware.
 func NewHTTPServer(svc *Service) *http.Server {
 	mux := http.NewServeMux()
-	mux.HandleFunc(http.MethodGet+" "+common.PathHealthz, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(http.MethodGet+" "+common.PathHealthz, func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
@@ -62,9 +64,9 @@ func (svc *Service) withCommon(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 		// Enforce max body size
-		max := safeInt64(svc.Cfg.Server.MaxUploadSize)
-		if max > 0 {
-			r.Body = http.MaxBytesReader(w, r.Body, max)
+		maxSize := safeInt64(svc.Cfg.Server.MaxUploadSize)
+		if maxSize > 0 {
+			r.Body = http.MaxBytesReader(w, r.Body, maxSize)
 		}
 		next.ServeHTTP(w, r)
 	}
@@ -144,7 +146,7 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 		CreatedAt:   time.Now().UTC(),
 	}
 
-	if err := svc.Store.CreateJob(&job); err != nil {
+	if err := svc.Store.CreateJob(r.Context(), &job); err != nil {
 		if svc.Log != nil {
 			svc.Log.Error("persist job", "error", err)
 		}
@@ -212,7 +214,7 @@ func (svc *Service) handleGetTranscriptionByPrefix(w http.ResponseWriter, r *htt
 		return
 	}
 	id := m[1]
-	job, err := svc.Store.GetJob(id)
+	job, err := svc.Store.GetJob(r.Context(), id)
 	if err != nil || job == nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -234,7 +236,7 @@ func jobToOut(job *jobs.Job) map[string]any {
 		Location string `json:"location"`
 		Commit   string `json:"commit"`
 	}
-	var errVal any = nil
+	var errVal any
 	if job.ErrorMessage != nil && *job.ErrorMessage != "" {
 		errVal = "internal error"
 	}
@@ -277,7 +279,7 @@ func parseOptionalURL(s string) (*string, error) {
 		return nil, nil
 	}
 	if _, err := url.ParseRequestURI(v); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid URL: %w", err)
 	}
 	return &v, nil
 }
@@ -289,7 +291,7 @@ func parseOptionalJSONMap(s string) (map[string]any, error) {
 	}
 	var m map[string]any
 	if err := json.Unmarshal([]byte(v), &m); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid JSON: %w", err)
 	}
 	return m, nil
 }

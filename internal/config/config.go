@@ -1,3 +1,4 @@
+// Package config loads and validates gostwriter configuration from YAML.
 package config
 
 import (

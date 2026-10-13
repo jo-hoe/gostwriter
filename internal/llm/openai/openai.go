@@ -86,7 +86,7 @@ func (c *Client) TranscribeImage(ctx context.Context, r io.Reader, mime string) 
 
 	content, err := c.chat.Complete(ctx, req)
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("transcribe: %w", err)
 	}
 
 	conv := &conversation{
@@ -114,7 +114,7 @@ func (c *Client) SuggestFilename(ctx context.Context, conv llm.Conversation) (st
 
 	slug, err := c.chat.Complete(ctx, req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("suggest filename: %w", err)
 	}
 	return cleanCompletion(slug), nil
 }

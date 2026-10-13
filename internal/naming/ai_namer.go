@@ -26,7 +26,8 @@ func NewAINamer(basePath, extension string) *AINamer {
 	return &AINamer{basePath: basePath, extension: extension}
 }
 
-func (n *AINamer) Name(req NamingRequest) (string, error) {
+// Name produces a filename using the suggested slug (or JobID as fallback) with a timestamp prefix.
+func (n *AINamer) Name(req Request) (string, error) {
 	slug := req.JobID
 	if req.SuggestedSlug != nil && strings.TrimSpace(*req.SuggestedSlug) != "" {
 		slug = strings.TrimSpace(*req.SuggestedSlug)

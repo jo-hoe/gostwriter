@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -8,13 +9,16 @@ import (
 	"time"
 
 	"github.com/jo-hoe/gostwriter/internal/common"
+	// Driver import for side-effect registration.
 	_ "modernc.org/sqlite"
 )
 
+// SQLiteStore is a Store backed by a SQLite database.
 type SQLiteStore struct {
 	db *sql.DB
 }
 
+// NewSQLiteStore opens (or creates) a SQLite database at path and runs migrations.
 func NewSQLiteStore(path string) (*SQLiteStore, error) {
 	// Busy timeout to avoid SQLITE_BUSY in concurrent access.
 	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(%d)", path, common.SQLiteBusyTimeoutMS)
@@ -48,13 +52,14 @@ func migrate(db *sql.DB) error {
 		completed_at TEXT
 	);
 	`
-	if _, err := db.Exec(schema); err != nil {
+	if _, err := db.ExecContext(context.Background(), schema); err != nil {
 		return fmt.Errorf("migrate schema: %w", err)
 	}
 	return nil
 }
 
-func (s *SQLiteStore) CreateJob(job *Job) error {
+// CreateJob inserts a new job record into the database.
+func (s *SQLiteStore) CreateJob(ctx context.Context, job *Job) error {
 	if job == nil {
 		return errors.New("job is nil")
 	}
@@ -77,7 +82,7 @@ func (s *SQLiteStore) CreateJob(job *Job) error {
 		cb = job.CallbackURL
 	}
 
-	_, err := s.db.Exec(
+	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO jobs (id, image_path, mime_type, target_name, callback_url, metadata_json, stage, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		job.ID, job.ImagePath, job.MimeType, job.TargetName, cb, meta, string(job.Stage), job.CreatedAt.UTC().Format(time.RFC3339Nano),
@@ -88,7 +93,8 @@ func (s *SQLiteStore) CreateJob(job *Job) error {
 	return nil
 }
 
-func (s *SQLiteStore) UpdateStage(id string, stage Stage, startedAt *time.Time) error {
+// UpdateStage updates the stage (and optionally started_at) for a job.
+func (s *SQLiteStore) UpdateStage(ctx context.Context, id string, stage Stage, startedAt *time.Time) error {
 	var started *string
 	if startedAt != nil {
 		ts := startedAt.UTC().Format(time.RFC3339Nano)
@@ -96,21 +102,22 @@ func (s *SQLiteStore) UpdateStage(id string, stage Stage, startedAt *time.Time) 
 	}
 	// Update stage and optionally started_at (only set when provided).
 	if started != nil {
-		_, err := s.db.Exec(`UPDATE jobs SET stage = ?, started_at = ? WHERE id = ?`, string(stage), *started, id)
+		_, err := s.db.ExecContext(ctx, `UPDATE jobs SET stage = ?, started_at = ? WHERE id = ?`, string(stage), *started, id)
 		if err != nil {
 			return fmt.Errorf("update stage: %w", err)
 		}
 		return nil
 	}
-	_, err := s.db.Exec(`UPDATE jobs SET stage = ? WHERE id = ?`, string(stage), id)
+	_, err := s.db.ExecContext(ctx, `UPDATE jobs SET stage = ? WHERE id = ?`, string(stage), id)
 	if err != nil {
 		return fmt.Errorf("update stage: %w", err)
 	}
 	return nil
 }
 
-func (s *SQLiteStore) SaveResult(id string, location, commit string, completedAt time.Time) error {
-	_, err := s.db.Exec(`UPDATE jobs
+// SaveResult records a successful posting result for a job.
+func (s *SQLiteStore) SaveResult(ctx context.Context, id string, location, commit string, completedAt time.Time) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE jobs
 		SET target_location = ?, target_commit = ?, stage = ?, error_message = NULL, completed_at = ?
 		WHERE id = ?`,
 		location, commit, string(StageCompleted), completedAt.UTC().Format(time.RFC3339Nano), id,
@@ -121,8 +128,9 @@ func (s *SQLiteStore) SaveResult(id string, location, commit string, completedAt
 	return nil
 }
 
-func (s *SQLiteStore) SaveError(id string, errMsg string, completedAt time.Time) error {
-	_, err := s.db.Exec(`UPDATE jobs
+// SaveError records a failed job with an error message.
+func (s *SQLiteStore) SaveError(ctx context.Context, id string, errMsg string, completedAt time.Time) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE jobs
 		SET error_message = ?, stage = ?, completed_at = ?
 		WHERE id = ?`,
 		errMsg, string(StageFailed), completedAt.UTC().Format(time.RFC3339Nano), id,
@@ -133,8 +141,9 @@ func (s *SQLiteStore) SaveError(id string, errMsg string, completedAt time.Time)
 	return nil
 }
 
-func (s *SQLiteStore) GetJob(id string) (*Job, error) {
-	row := s.db.QueryRow(`SELECT id, image_path, mime_type, target_name, callback_url, title, metadata_json, stage,
+// GetJob retrieves a job by ID.
+func (s *SQLiteStore) GetJob(ctx context.Context, id string) (*Job, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, image_path, mime_type, target_name, callback_url, title, metadata_json, stage,
 		error_message, target_location, target_commit, created_at, started_at, completed_at
 		FROM jobs WHERE id = ?`, id)
 
@@ -211,6 +220,10 @@ func (s *SQLiteStore) GetJob(id string) (*Job, error) {
 	return &job, nil
 }
 
+// Close closes the underlying database connection.
 func (s *SQLiteStore) Close() error {
-	return s.db.Close()
+	if err := s.db.Close(); err != nil {
+		return fmt.Errorf("close db: %w", err)
+	}
+	return nil
 }

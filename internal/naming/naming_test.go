@@ -18,7 +18,7 @@ func TestTemplateNamer_Default(t *testing.T) {
 		t.Fatal(err)
 	}
 	ts := time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)
-	got, err := n.Name(NamingRequest{JobID: "abc", Timestamp: ts, Extension: ".md"})
+	got, err := n.Name(Request{JobID: "abc", Timestamp: ts, Extension: ".md"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestTemplateNamer_Custom(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := n.Name(NamingRequest{JobID: "job-123", Timestamp: time.Now()})
+	got, err := n.Name(Request{JobID: "job-123", Timestamp: time.Now()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestTemplateNamer_WithBasePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := n.Name(NamingRequest{JobID: "j1", Timestamp: time.Now()})
+	got, err := n.Name(Request{JobID: "j1", Timestamp: time.Now()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func (e *errChecker) Exists(_ context.Context, _ string) (bool, error) {
 func TestCollisionNamer_FreeOnFirstTry(t *testing.T) {
 	base, _ := NewTemplateNamer("{{ .JobID }}.md", "", "")
 	cn := NewCollisionNamer(base, &stubChecker{results: []bool{false}}, 5)
-	got, err := cn.Name(NamingRequest{JobID: "j1", Timestamp: time.Now()})
+	got, err := cn.Name(Request{JobID: "j1", Timestamp: time.Now()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +141,7 @@ func TestCollisionNamer_FreeOnFirstTry(t *testing.T) {
 func TestCollisionNamer_CollisionThenFree(t *testing.T) {
 	base, _ := NewTemplateNamer("{{ .JobID }}.md", "", "inbox/")
 	cn := NewCollisionNamer(base, &stubChecker{results: []bool{true, false}}, 5)
-	got, err := cn.Name(NamingRequest{JobID: "j1", Timestamp: time.Now()})
+	got, err := cn.Name(Request{JobID: "j1", Timestamp: time.Now()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestCollisionNamer_CollisionThenFree(t *testing.T) {
 func TestCollisionNamer_MultipleCollisions(t *testing.T) {
 	base, _ := NewTemplateNamer("{{ .JobID }}.md", "", "")
 	cn := NewCollisionNamer(base, &stubChecker{results: []bool{true, true, true, false}}, 10)
-	got, err := cn.Name(NamingRequest{JobID: "j1", Timestamp: time.Now()})
+	got, err := cn.Name(Request{JobID: "j1", Timestamp: time.Now()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestCollisionNamer_ExhaustedRetries(t *testing.T) {
 	base, _ := NewTemplateNamer("{{ .JobID }}.md", "", "")
 	// always occupied
 	cn := NewCollisionNamer(base, &stubChecker{results: []bool{true, true, true, true, true}}, 3)
-	_, err := cn.Name(NamingRequest{JobID: "j1", Timestamp: time.Now()})
+	_, err := cn.Name(Request{JobID: "j1", Timestamp: time.Now()})
 	if err == nil {
 		t.Fatal("expected error after exhausting retries")
 	}
@@ -175,7 +175,7 @@ func TestCollisionNamer_ExhaustedRetries(t *testing.T) {
 func TestCollisionNamer_CheckerError(t *testing.T) {
 	base, _ := NewTemplateNamer("{{ .JobID }}.md", "", "")
 	cn := NewCollisionNamer(base, &errChecker{}, 5)
-	_, err := cn.Name(NamingRequest{JobID: "j1", Timestamp: time.Now()})
+	_, err := cn.Name(Request{JobID: "j1", Timestamp: time.Now()})
 	if err == nil {
 		t.Fatal("expected error from checker")
 	}

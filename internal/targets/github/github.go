@@ -1,3 +1,4 @@
+// Package github implements the GitHub REST API target.
 package github
 
 import (
@@ -55,11 +56,13 @@ func (t *Target) WithHTTPClient(c *http.Client) *Target {
 	return t
 }
 
+// Name returns the target's registered name.
 func (t *Target) Name() string { return t.name }
 
+// Post transcribes req.Markdown to the configured GitHub repository branch.
 func (t *Target) Post(ctx context.Context, req targets.TargetRequest) (targets.TargetResult, error) {
 	// Resolve filename via the injected naming strategy.
-	nr := naming.NamingRequest{
+	nr := naming.Request{
 		JobID:         req.JobID,
 		Timestamp:     req.Timestamp,
 		SuggestedSlug: req.SuggestedSlug,
@@ -75,13 +78,13 @@ func (t *Target) Post(ctx context.Context, req targets.TargetRequest) (targets.T
 		filename, err = t.namer.Name(nr)
 	}
 	if err != nil {
-		return targets.TargetResult{}, err
+		return targets.TargetResult{}, fmt.Errorf("resolve filename: %w", err)
 	}
 	mdPath := filepath.ToSlash(filename)
 
 	commitMsg, err := t.renderCommitMessage(req)
 	if err != nil {
-		return targets.TargetResult{}, err
+		return targets.TargetResult{}, fmt.Errorf("render commit message: %w", err)
 	}
 
 	markdown := req.Markdown
@@ -102,7 +105,7 @@ func (t *Target) Post(ctx context.Context, req targets.TargetRequest) (targets.T
 
 	out, err := t.putContents(ctx, mdPath, []byte(markdown), commitMsg)
 	if err != nil {
-		return targets.TargetResult{}, err
+		return targets.TargetResult{}, fmt.Errorf("put markdown: %w", err)
 	}
 
 	loc := fmt.Sprintf("github:%s/%s@%s:%s", t.cfg.RepositoryOwner, t.cfg.RepositoryName, t.cfg.Branch, mdPath)

@@ -1,3 +1,4 @@
+// Package mock provides a mock LLM client for testing.
 package mock
 
 import (
@@ -25,6 +26,7 @@ type Client struct {
 	prefix string
 }
 
+// New creates a mock LLM client from configuration.
 func New(cfg config.MockSettings) *Client {
 	return &Client{
 		delay:  cfg.Delay,
@@ -32,6 +34,7 @@ func New(cfg config.MockSettings) *Client {
 	}
 }
 
+// TranscribeImage satisfies llm.Client. It returns canned Markdown after a configurable delay.
 func (c *Client) TranscribeImage(ctx context.Context, r io.Reader, mime string) (string, llm.Conversation, error) {
 	// Consume a little to simulate reading (optional)
 	buf := make([]byte, 256)
@@ -43,7 +46,7 @@ func (c *Client) TranscribeImage(ctx context.Context, r io.Reader, mime string) 
 		defer t.Stop()
 		select {
 		case <-ctx.Done():
-			return "", nil, ctx.Err()
+			return "", nil, fmt.Errorf("mock: %w", ctx.Err())
 		case <-t.C:
 		}
 	}
@@ -60,7 +63,7 @@ func (c *Client) SuggestFilename(ctx context.Context, _ llm.Conversation) (strin
 		defer t.Stop()
 		select {
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return "", fmt.Errorf("mock: %w", ctx.Err())
 		case <-t.C:
 		}
 	}

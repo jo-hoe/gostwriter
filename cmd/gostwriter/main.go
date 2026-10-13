@@ -1,3 +1,4 @@
+// Package main is the gostwriter server entry point.
 package main
 
 import (

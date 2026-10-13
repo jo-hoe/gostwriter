@@ -15,6 +15,8 @@ type CollisionNamer struct {
 	maxTry  int
 }
 
+// NewCollisionNamer creates a CollisionNamer with the given inner namer and checker.
+// maxTry caps the suffix search; values ≤ 0 default to 100.
 func NewCollisionNamer(inner FileNamer, checker PathChecker, maxTry int) *CollisionNamer {
 	if maxTry <= 0 {
 		maxTry = 100
@@ -23,15 +25,15 @@ func NewCollisionNamer(inner FileNamer, checker PathChecker, maxTry int) *Collis
 }
 
 // Name satisfies FileNamer using context.Background.
-func (n *CollisionNamer) Name(req NamingRequest) (string, error) {
+func (n *CollisionNamer) Name(req Request) (string, error) {
 	return n.NameWithContext(context.Background(), req)
 }
 
 // NameWithContext is the preferred entry point when a live context is available.
-func (n *CollisionNamer) NameWithContext(ctx context.Context, req NamingRequest) (string, error) {
+func (n *CollisionNamer) NameWithContext(ctx context.Context, req Request) (string, error) {
 	base, err := n.inner.Name(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("inner name: %w", err)
 	}
 	candidate := base
 	for i := 1; i <= n.maxTry; i++ {

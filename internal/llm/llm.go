@@ -1,3 +1,4 @@
+// Package llm defines the LLM client interface and optional capability interfaces.
 package llm
 
 import (

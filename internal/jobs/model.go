@@ -1,12 +1,15 @@
+// Package jobs defines the job model and store interface for transcription lifecycle tracking.
 package jobs
 
 import (
+	"context"
 	"time"
 )
 
 // Stage represents the lifecycle stage of a transcription job.
 type Stage string
 
+// Stage constants describe the lifecycle phases of a transcription job.
 const (
 	StageQueued       Stage = "queued"
 	StageTranscribing Stage = "transcribing"
@@ -41,10 +44,10 @@ type TargetResult struct {
 
 // Store defines persistence for Jobs and their lifecycle.
 type Store interface {
-	CreateJob(job *Job) error
-	UpdateStage(id string, stage Stage, startedAt *time.Time) error
-	SaveResult(id string, location, commit string, completedAt time.Time) error
-	SaveError(id string, errMsg string, completedAt time.Time) error
-	GetJob(id string) (*Job, error)
+	CreateJob(ctx context.Context, job *Job) error
+	UpdateStage(ctx context.Context, id string, stage Stage, startedAt *time.Time) error
+	SaveResult(ctx context.Context, id string, location, commit string, completedAt time.Time) error
+	SaveError(ctx context.Context, id string, errMsg string, completedAt time.Time) error
+	GetJob(ctx context.Context, id string) (*Job, error)
 	Close() error
 }
