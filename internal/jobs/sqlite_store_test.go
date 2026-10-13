@@ -27,10 +27,6 @@ func TestSQLiteStore_JobLifecycle(t *testing.T) {
 			v := "http://example.com/callback"
 			return &v
 		}(),
-		Title: func() *string {
-			v := "Title"
-			return &v
-		}(),
 		Metadata:  map[string]any{"k": "v"},
 		Stage:     StageQueued,
 		CreatedAt: now,

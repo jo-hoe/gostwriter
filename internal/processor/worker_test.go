@@ -92,14 +92,11 @@ func (s *memStore) GetJob(id string) (*jobs.Job, error) {
 func (s *memStore) Close() error { return nil }
 
 type llmMock struct {
-	out            string
-	err            error
-	generatedTitle string
-	titleErr       error
-	titleCalled    bool
-	suggestedSlug  string
-	slugErr        error
-	slugCalled     bool
+	out           string
+	err           error
+	suggestedSlug string
+	slugErr       error
+	slugCalled    bool
 }
 
 type llmConv struct{}
@@ -112,11 +109,6 @@ func (m *llmMock) TranscribeImage(ctx context.Context, r io.Reader, mime string)
 	}
 	_, _ = io.Copy(io.Discard, r)
 	return m.out, llmConv{}, nil
-}
-
-func (m *llmMock) GenerateTitle(_ context.Context, _ string) (string, error) {
-	m.titleCalled = true
-	return m.generatedTitle, m.titleErr
 }
 
 func (m *llmMock) SuggestFilename(_ context.Context, _ llm.Conversation) (string, error) {
@@ -207,7 +199,6 @@ func TestWorker_Process_SuccessWithCallback(t *testing.T) {
 	}
 
 	cbURL := cbSrv.URL
-	title := "Title"
 	meta := map[string]any{"k": "v"}
 	job := jobs.Job{
 		ID:          "job-1",
@@ -215,7 +206,6 @@ func TestWorker_Process_SuccessWithCallback(t *testing.T) {
 		MimeType:    common.MimeImagePNG,
 		TargetName:  "github",
 		CallbackURL: &cbURL,
-		Title:       &title,
 		Metadata:    meta,
 		Stage:       jobs.StageQueued,
 		CreatedAt:   time.Now().UTC(),
@@ -299,7 +289,7 @@ func filepathJoin(dir, name string) string {
 	return dir + string(os.PathSeparator) + name
 }
 
-func makeWorkerWithCapture(t *testing.T, llmClient *llmMock, generateTitle bool) (*Worker, *capturingTarget, jobs.Store) {
+func makeWorkerWithCapture(t *testing.T, llmClient *llmMock) (*Worker, *capturingTarget, jobs.Store) {
 	t.Helper()
 	store := newMemStore()
 	tgt := &capturingTarget{name: "github"}
@@ -314,8 +304,7 @@ func makeWorkerWithCapture(t *testing.T, llmClient *llmMock, generateTitle bool)
 		},
 		Target: config.TargetsConfig{
 			GitHub: config.GitHubTargetConfig{
-				Enabled:       true,
-				GenerateTitle: generateTitle,
+				Enabled: true,
 			},
 		},
 	}
@@ -329,82 +318,6 @@ func makeTempImage(t *testing.T) string {
 		t.Fatalf("write img: %v", err)
 	}
 	return p
-}
-
-func TestWorker_GeneratesTitle_WhenEnabled(t *testing.T) {
-	llmClient := &llmMock{out: "body text", generatedTitle: "Generated Title"}
-	worker, tgt, store := makeWorkerWithCapture(t, llmClient, true)
-
-	job := jobs.Job{
-		ID: "j1", ImagePath: makeTempImage(t), MimeType: common.MimeImagePNG,
-		TargetName: "github", Stage: jobs.StageQueued, CreatedAt: time.Now().UTC(),
-	}
-	_ = store.CreateJob(&job)
-
-	if err := worker.Process(context.Background(), jobs.WorkItem{Job: job}); err != nil {
-		t.Fatalf("Process: %v", err)
-	}
-	if !llmClient.titleCalled {
-		t.Fatal("expected GenerateTitle to be called")
-	}
-	if tgt.lastReq.SuggestedTitle == nil || *tgt.lastReq.SuggestedTitle != "Generated Title" {
-		t.Fatalf("SuggestedTitle not propagated: %v", tgt.lastReq.SuggestedTitle)
-	}
-}
-
-func TestWorker_SkipsTitle_WhenDisabled(t *testing.T) {
-	llmClient := &llmMock{out: "body text", generatedTitle: "Should Not Appear"}
-	worker, _, store := makeWorkerWithCapture(t, llmClient, false)
-
-	job := jobs.Job{
-		ID: "j2", ImagePath: makeTempImage(t), MimeType: common.MimeImagePNG,
-		TargetName: "github", Stage: jobs.StageQueued, CreatedAt: time.Now().UTC(),
-	}
-	_ = store.CreateJob(&job)
-	_ = worker.Process(context.Background(), jobs.WorkItem{Job: job})
-
-	if llmClient.titleCalled {
-		t.Fatal("GenerateTitle should not be called when generateTitle=false")
-	}
-}
-
-func TestWorker_UserTitlePreserved_WhenGenerateEnabled(t *testing.T) {
-	llmClient := &llmMock{out: "body text", generatedTitle: "LLM Title"}
-	worker, tgt, store := makeWorkerWithCapture(t, llmClient, true)
-
-	userTitle := "User Supplied"
-	job := jobs.Job{
-		ID: "j3", ImagePath: makeTempImage(t), MimeType: common.MimeImagePNG,
-		TargetName: "github", Title: &userTitle, Stage: jobs.StageQueued, CreatedAt: time.Now().UTC(),
-	}
-	_ = store.CreateJob(&job)
-	_ = worker.Process(context.Background(), jobs.WorkItem{Job: job})
-
-	if llmClient.titleCalled {
-		t.Fatal("GenerateTitle should not be called when user already supplied a title")
-	}
-	if tgt.lastReq.SuggestedTitle == nil || *tgt.lastReq.SuggestedTitle != "User Supplied" {
-		t.Fatalf("user title not preserved: %v", tgt.lastReq.SuggestedTitle)
-	}
-}
-
-func TestWorker_TitleGenerationFailureIsNonFatal(t *testing.T) {
-	llmClient := &llmMock{out: "body text", titleErr: errors.New("llm unavailable")}
-	worker, _, store := makeWorkerWithCapture(t, llmClient, true)
-
-	job := jobs.Job{
-		ID: "j4", ImagePath: makeTempImage(t), MimeType: common.MimeImagePNG,
-		TargetName: "github", Stage: jobs.StageQueued, CreatedAt: time.Now().UTC(),
-	}
-	_ = store.CreateJob(&job)
-
-	if err := worker.Process(context.Background(), jobs.WorkItem{Job: job}); err != nil {
-		t.Fatalf("job should complete despite title generation failure, got: %v", err)
-	}
-	got, _ := store.GetJob(job.ID)
-	if got.Stage != jobs.StageCompleted {
-		t.Fatalf("expected completed, got %q", got.Stage)
-	}
 }
 
 func makeWorkerWithArchive(t *testing.T, llmClient *llmMock, archive bool) (*Worker, *capturingTarget, jobs.Store) {

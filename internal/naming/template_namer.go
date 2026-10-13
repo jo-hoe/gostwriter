@@ -9,7 +9,7 @@ import (
 )
 
 // TemplateNamer renders a Go text/template to produce the filename.
-// Available template variables: .JobID, .Timestamp, .SuggestedTitle, .Metadata
+// Available template variables: .JobID, .Timestamp, .Metadata
 type TemplateNamer struct {
 	tpl      *template.Template
 	basePath string
@@ -31,10 +31,9 @@ func NewTemplateNamer(tplStr, defaultTpl, basePath string) (*TemplateNamer, erro
 
 func (n *TemplateNamer) Name(req NamingRequest) (string, error) {
 	data := map[string]any{
-		"JobID":          req.JobID,
-		"Timestamp":      req.Timestamp,
-		"SuggestedTitle": req.SuggestedTitle,
-		"Metadata":       req.Metadata,
+		"JobID":     req.JobID,
+		"Timestamp": req.Timestamp,
+		"Metadata":  req.Metadata,
 	}
 	var buf bytes.Buffer
 	if err := n.tpl.Execute(&buf, data); err != nil {

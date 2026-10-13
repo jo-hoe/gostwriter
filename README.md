@@ -96,7 +96,6 @@ curl -X POST "http://localhost:8080/v1/transcriptions" \
 curl -X POST "http://localhost:8080/v1/transcriptions" \
       -H "Prefer: respond-async" \
       -F "file=@/path/to/image.png" \
-      -F "title=Meeting Notes" \
       -F "callback_url=https://example.com/hooks/gostwriter" \
       -F 'metadata={"source":"whiteboard","tags":["project-x"]}' \
       -H "X-API-Key: YOUR_API_KEY"    # include only if apiKey is configured
@@ -121,7 +120,7 @@ Notes:
 
 - Required form field: `file` (PNG/JPEG/PDF)
 - The upload type is determined by inspecting the file content (magic numbers); the `Content-Type` header and filename extension are ignored, and content that does not match a supported type is rejected
-- Optional fields: `title`, `metadata` (JSON object string), `callback_url` (HTTP(s) URL)
+- Optional fields: `metadata` (JSON object string), `callback_url` (HTTP(s) URL)
 - Targets are fixed by server configuration; requests cannot override the target
 - Max upload size defaults to 10 MiB (configurable)
 

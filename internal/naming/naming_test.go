@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 )
@@ -60,71 +59,6 @@ func TestTemplateNamer_InvalidTemplate(t *testing.T) {
 	_, err := NewTemplateNamer("{{ .Bad", "", "")
 	if err == nil {
 		t.Fatal("expected error for invalid template")
-	}
-}
-
-// --- TitleNamer ---
-
-func TestTitleNamer_WithTitle(t *testing.T) {
-	n := NewTitleNamer("", ".md")
-	title := "Hello World: A Test!"
-	got, err := n.Name(NamingRequest{JobID: "j1", SuggestedTitle: &title})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "hello-world-a-test.md" {
-		t.Fatalf("unexpected: %s", got)
-	}
-}
-
-func TestTitleNamer_FallbackToJobID_Nil(t *testing.T) {
-	n := NewTitleNamer("", ".md")
-	got, err := n.Name(NamingRequest{JobID: "fallback-id", SuggestedTitle: nil})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "fallback-id.md" {
-		t.Fatalf("unexpected: %s", got)
-	}
-}
-
-func TestTitleNamer_FallbackToJobID_Empty(t *testing.T) {
-	n := NewTitleNamer("", ".md")
-	empty := "   "
-	got, err := n.Name(NamingRequest{JobID: "fallback-id", SuggestedTitle: &empty})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "fallback-id.md" {
-		t.Fatalf("unexpected: %s", got)
-	}
-}
-
-func TestTitleNamer_SpecialChars(t *testing.T) {
-	n := NewTitleNamer("", ".md")
-	title := "foo/bar?baz<qux>"
-	got, err := n.Name(NamingRequest{JobID: "j", SuggestedTitle: &title})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(got, "/") && got != "foo/bar-baz-qux.md" {
-		// path sep is fine only when it was the basePath separator; the slug itself must not have "/"
-		t.Fatalf("unexpected: %s", got)
-	}
-	if strings.Contains(got, "?") || strings.Contains(got, "<") || strings.Contains(got, ">") {
-		t.Fatalf("slug contains forbidden chars: %s", got)
-	}
-}
-
-func TestTitleNamer_WithBasePath(t *testing.T) {
-	n := NewTitleNamer("inbox/", ".md")
-	title := "My Note"
-	got, err := n.Name(NamingRequest{JobID: "j", SuggestedTitle: &title})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "inbox/my-note.md" {
-		t.Fatalf("unexpected: %s", got)
 	}
 }
 

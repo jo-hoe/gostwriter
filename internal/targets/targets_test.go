@@ -37,7 +37,6 @@ func TestRegistry_AddGetNames(t *testing.T) {
 	req := TargetRequest{
 		JobID:            "job",
 		Markdown:         "md",
-		SuggestedTitle:   nil,
 		Metadata:         map[string]any{"k": "v"},
 		Timestamp:        time.Now(),
 		FilenameTemplate: "{{ .JobID }}.md",

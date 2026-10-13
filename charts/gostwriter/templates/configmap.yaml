@@ -54,7 +54,6 @@ data:
         authorName: {{ .Values.target.github.authorName | quote }}
         authorEmail: {{ .Values.target.github.authorEmail | quote }}
         apiBaseUrl: {{ .Values.target.github.apiBaseUrl | quote }}
-        generateTitle: {{ .Values.target.github.generateTitle }}
         namingStrategy: {{ .Values.target.github.namingStrategy | quote }}
         archive:
           enabled: {{ .Values.target.github.archive.enabled }}

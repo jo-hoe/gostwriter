@@ -175,66 +175,6 @@ func TestOpenAI_TranscribeImage_EmptyImage(t *testing.T) {
 	}
 }
 
-func TestOpenAI_GenerateTitle_Success(t *testing.T) {
-	var seenBody chat.Request
-	ts := stubServer("My Generated Title", &seenBody)
-	defer ts.Close()
-
-	c := New(config.OpenAISettings{BaseURL: ts.URL, Model: "gpt-5"})
-	title, err := c.GenerateTitle(context.Background(), "# Some markdown content")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if title != "My Generated Title" {
-		t.Fatalf("unexpected title: %q", title)
-	}
-	// Title request must be text-only (string content, not []chat.Part).
-	if _, ok := seenBody.Messages[1].Content.(string); !ok {
-		t.Fatalf("expected string content for title request: %#v", seenBody.Messages[1].Content)
-	}
-}
-
-func TestOpenAI_GenerateTitle_StripsSurroundingQuotes(t *testing.T) {
-	ts := stubServer(`"Quoted Title"`, nil)
-	defer ts.Close()
-
-	c := New(config.OpenAISettings{BaseURL: ts.URL, Model: "gpt-5"})
-	title, err := c.GenerateTitle(context.Background(), "some markdown")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if title != "Quoted Title" {
-		t.Fatalf("quotes not stripped: %q", title)
-	}
-}
-
-func TestOpenAI_GenerateTitle_EmptyCompletion(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(chat.Response{Choices: []chat.Choice{}})
-	}))
-	defer ts.Close()
-
-	c := New(config.OpenAISettings{BaseURL: ts.URL, Model: "gpt-5"})
-	_, err := c.GenerateTitle(context.Background(), "some markdown")
-	if err == nil {
-		t.Fatal("expected error for empty choices")
-	}
-}
-
-func TestOpenAI_GenerateTitle_Non200(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-	}))
-	defer ts.Close()
-
-	c := New(config.OpenAISettings{BaseURL: ts.URL, Model: "gpt-5"})
-	_, err := c.GenerateTitle(context.Background(), "some markdown")
-	if err == nil {
-		t.Fatal("expected error for non-200 response")
-	}
-}
-
 func TestOpenAI_TranscribeImage_ReturnsConversation(t *testing.T) {
 	ts := stubServer("transcribed", nil)
 	defer ts.Close()

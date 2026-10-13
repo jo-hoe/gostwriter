@@ -1,6 +1,6 @@
-// Package openai implements the gostwriter LLM capabilities (transcription,
-// title generation, filename suggestion) against any OpenAI-compatible Chat
-// Completions endpoint, including an ai-proxy reverse proxy or api.openai.com.
+// Package openai implements the gostwriter LLM capabilities (transcription and
+// filename suggestion) against any OpenAI-compatible Chat Completions endpoint,
+// including an ai-proxy reverse proxy or api.openai.com.
 // The wire protocol lives in the chat sub-package so additional providers can
 // reuse it.
 package openai
@@ -23,18 +23,11 @@ var defaultSystemPrompt string
 //go:embed default_instructions.txt
 var defaultInstructions string
 
-//go:embed title_system_prompt.txt
-var defaultTitleSystemPrompt string
-
-//go:embed title_instructions.txt
-var defaultTitleInstructions string
-
 //go:embed filename_instructions.txt
 var defaultFilenameInstructions string
 
 var (
 	_ llm.Client          = (*Client)(nil)
-	_ llm.TitleGenerator  = (*Client)(nil)
 	_ llm.FilenameAdvisor = (*Client)(nil)
 )
 
@@ -42,8 +35,6 @@ var (
 const providerName = "openai"
 
 const (
-	// titleMaxTokens bounds the title completion.
-	titleMaxTokens = 64
 	// filenameMaxTokens bounds the filename-slug completion.
 	filenameMaxTokens = 32
 )
@@ -102,21 +93,6 @@ func (c *Client) TranscribeImage(ctx context.Context, r io.Reader, mime string) 
 		messages: append(msgs, chat.Message{Role: chat.RoleAssistant, Content: content}),
 	}
 	return content, conv, nil
-}
-
-// GenerateTitle satisfies llm.TitleGenerator.
-func (c *Client) GenerateTitle(ctx context.Context, markdown string) (string, error) {
-	msgs := []chat.Message{
-		{Role: chat.RoleSystem, Content: strings.TrimSpace(defaultTitleSystemPrompt)},
-		{Role: chat.RoleUser, Content: strings.TrimSpace(defaultTitleInstructions) + "\n\n" + markdown},
-	}
-	req := c.newRequest(msgs, c.maxTokensOr(titleMaxTokens))
-
-	title, err := c.chat.Complete(ctx, req)
-	if err != nil {
-		return "", err
-	}
-	return cleanCompletion(title), nil
 }
 
 // SuggestFilename satisfies llm.FilenameAdvisor. It continues the transcription
