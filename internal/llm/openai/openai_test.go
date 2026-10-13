@@ -12,24 +12,30 @@ import (
 	"time"
 
 	"github.com/jo-hoe/gostwriter/internal/config"
-	"github.com/jo-hoe/gostwriter/internal/llm/openai/chat"
+	"github.com/jo-hoe/gostwriter/internal/llm/openai/responses"
 )
+
+// okResponse builds a Responses API reply carrying a single message output item
+// with the given text.
+func okResponse(content string) responses.Response {
+	return responses.Response{Output: []responses.OutputItem{
+		{Type: "message", Content: []responses.OutputContent{{Type: "output_text", Text: content}}},
+	}}
+}
 
 func TestOpenAI_TranscribeImage_Success(t *testing.T) {
 	var seenAuth string
-	var seenBody chat.Request
+	var seenBody responses.Request
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seenAuth = r.Header.Get("Authorization")
-		if r.URL.Path != "/v1/chat/completions" {
+		if r.URL.Path != "/v1/responses" {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
 		_ = json.NewDecoder(r.Body).Decode(&seenBody)
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(chat.Response{
-			Choices: []chat.Choice{{Message: chat.ResponseMsg{Role: "assistant", Content: "Hello Markdown"}}},
-		})
+		_ = json.NewEncoder(w).Encode(okResponse("Hello Markdown"))
 	}))
 	defer ts.Close()
 
@@ -58,39 +64,39 @@ func TestOpenAI_TranscribeImage_Success(t *testing.T) {
 	if seenBody.Model != "gpt-5" {
 		t.Fatalf("expected model gpt-5, got %q", seenBody.Model)
 	}
-	if len(seenBody.Messages) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(seenBody.Messages))
+	if len(seenBody.Input) != 2 {
+		t.Fatalf("expected 2 input items, got %d", len(seenBody.Input))
 	}
-	if seenBody.Messages[0].Role != chat.RoleSystem || seenBody.Messages[0].Content.(string) != "System X" {
-		t.Fatalf("system prompt not set correctly: %+v", seenBody.Messages[0])
+	if seenBody.Input[0].Role != responses.RoleSystem {
+		t.Fatalf("first item should be system, got %q", seenBody.Input[0].Role)
 	}
-	userParts, ok := seenBody.Messages[1].Content.([]any)
-	if !ok || len(userParts) == 0 {
-		t.Fatalf("user content not array of parts: %#v", seenBody.Messages[1].Content)
+	if len(seenBody.Input[0].Content) != 1 || seenBody.Input[0].Content[0].Text != "System X" {
+		t.Fatalf("system prompt not set correctly: %+v", seenBody.Input[0])
 	}
-	first, ok := userParts[0].(map[string]any)
-	if !ok || first["type"] != "text" || first["text"] != "User Instructions" {
-		t.Fatalf("first user part not text instructions: %#v", first)
+	if seenBody.Input[1].Role != responses.RoleUser || len(seenBody.Input[1].Content) == 0 {
+		t.Fatalf("user item not populated: %+v", seenBody.Input[1])
+	}
+	first := seenBody.Input[1].Content[0]
+	if first.Type != responses.PartInputText || first.Text != "User Instructions" {
+		t.Fatalf("first user part not text instructions: %+v", first)
 	}
 }
 
 // stubServer returns an httptest server that always replies with the given
 // completion content, decoding each request into *dst when dst is non-nil.
-func stubServer(content string, dst *chat.Request) *httptest.Server {
+func stubServer(content string, dst *responses.Request) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if dst != nil {
 			_ = json.NewDecoder(r.Body).Decode(dst)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(chat.Response{
-			Choices: []chat.Choice{{Message: chat.ResponseMsg{Role: "assistant", Content: content}}},
-		})
+		_ = json.NewEncoder(w).Encode(okResponse(content))
 	}))
 }
 
-func captureUserParts(t *testing.T, mime string, data []byte) []any {
+func captureUserParts(t *testing.T, mime string, data []byte) []responses.Part {
 	t.Helper()
-	var seenBody chat.Request
+	var seenBody responses.Request
 	ts := stubServer("ok", &seenBody)
 	defer ts.Close()
 
@@ -98,54 +104,39 @@ func captureUserParts(t *testing.T, mime string, data []byte) []any {
 	if _, _, err := c.TranscribeImage(context.Background(), bytes.NewReader(data), mime); err != nil {
 		t.Fatalf("TranscribeImage: %v", err)
 	}
-	parts, ok := seenBody.Messages[1].Content.([]any)
-	if !ok {
-		t.Fatalf("user content not array of parts: %#v", seenBody.Messages[1].Content)
+	if len(seenBody.Input) != 2 {
+		t.Fatalf("expected 2 input items, got %d", len(seenBody.Input))
 	}
-	return parts
+	return seenBody.Input[1].Content
 }
 
-func TestOpenAI_TranscribeImage_PNGUsesImageURLPart(t *testing.T) {
+func TestOpenAI_TranscribeImage_PNGUsesInputImagePart(t *testing.T) {
 	parts := captureUserParts(t, "image/png", []byte("pngbytes"))
 	if len(parts) != 2 {
 		t.Fatalf("expected 2 parts (text + image), got %d", len(parts))
 	}
-	img, ok := parts[1].(map[string]any)
-	if !ok || img["type"] != "image_url" {
-		t.Fatalf("second part should be image_url: %#v", parts[1])
+	img := parts[1]
+	if img.Type != responses.PartInputImage {
+		t.Fatalf("second part should be input_image: %+v", img)
 	}
-	urlObj, ok := img["image_url"].(map[string]any)
-	if !ok {
-		t.Fatalf("image_url object missing: %#v", img)
-	}
-	url, _ := urlObj["url"].(string)
-	if !strings.HasPrefix(url, "data:image/png;base64,") {
-		t.Fatalf("image_url url prefix mismatch: %q", url)
+	if !strings.HasPrefix(img.ImageURL, "data:image/png;base64,") {
+		t.Fatalf("image_url prefix mismatch: %q", img.ImageURL)
 	}
 }
 
-func TestOpenAI_TranscribeImage_PDFUsesFilePart(t *testing.T) {
+func TestOpenAI_TranscribeImage_PDFUsesInputFilePart(t *testing.T) {
+	// The Responses API supports PDFs natively; the provider must send an
+	// "input_file" part carrying the inline-base64 document.
 	parts := captureUserParts(t, "application/pdf", []byte("%PDF-1.7"))
 	if len(parts) != 2 {
 		t.Fatalf("expected 2 parts (text + file), got %d", len(parts))
 	}
-	fp, ok := parts[1].(map[string]any)
-	if !ok || fp["type"] != "file" {
-		t.Fatalf("second part should be file: %#v", parts[1])
+	file := parts[1]
+	if file.Type != responses.PartInputFile {
+		t.Fatalf("second part should be input_file: %+v", file)
 	}
-	fileObj, ok := fp["file"].(map[string]any)
-	if !ok {
-		t.Fatalf("file object missing: %#v", fp)
-	}
-	if fileObj["filename"] != "document.pdf" {
-		t.Fatalf("filename mismatch: %#v", fileObj["filename"])
-	}
-	fileData, _ := fileObj["file_data"].(string)
-	if !strings.HasPrefix(fileData, "data:application/pdf;base64,") {
-		t.Fatalf("file_data prefix mismatch: %q", fileData)
-	}
-	if _, has := fp["image_url"]; has {
-		t.Fatalf("pdf file part should not include image_url: %#v", fp)
+	if !strings.HasPrefix(file.FileData, "data:application/pdf;base64,") {
+		t.Fatalf("file_data prefix mismatch: %q", file.FileData)
 	}
 }
 
@@ -193,7 +184,7 @@ func TestOpenAI_TranscribeImage_ReturnsConversation(t *testing.T) {
 }
 
 func TestOpenAI_SuggestFilename_ContinuesConversation(t *testing.T) {
-	var secondBody chat.Request
+	var secondBody responses.Request
 	var calls int
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
@@ -205,9 +196,7 @@ func TestOpenAI_SuggestFilename_ContinuesConversation(t *testing.T) {
 			content = `"invoice-november"`
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(chat.Response{
-			Choices: []chat.Choice{{Message: chat.ResponseMsg{Role: "assistant", Content: content}}},
-		})
+		_ = json.NewEncoder(w).Encode(okResponse(content))
 	}))
 	defer ts.Close()
 
@@ -226,14 +215,14 @@ func TestOpenAI_SuggestFilename_ContinuesConversation(t *testing.T) {
 	}
 	// The follow-up call must reuse the transcription history: system + user
 	// (instructions+document) + assistant reply + new filename instruction.
-	if len(secondBody.Messages) != 4 {
-		t.Fatalf("expected 4 messages continuing the conversation, got %d", len(secondBody.Messages))
+	if len(secondBody.Input) != 4 {
+		t.Fatalf("expected 4 input items continuing the conversation, got %d", len(secondBody.Input))
 	}
-	if secondBody.Messages[2].Role != chat.RoleAssistant {
-		t.Fatalf("expected assistant reply retained at index 2, got %q", secondBody.Messages[2].Role)
+	if secondBody.Input[2].Role != responses.RoleAssistant {
+		t.Fatalf("expected assistant reply retained at index 2, got %q", secondBody.Input[2].Role)
 	}
-	if secondBody.Messages[3].Role != chat.RoleUser {
-		t.Fatalf("expected filename instruction as final user turn, got %q", secondBody.Messages[3].Role)
+	if secondBody.Input[3].Role != responses.RoleUser {
+		t.Fatalf("expected filename instruction as final user turn, got %q", secondBody.Input[3].Role)
 	}
 }
 

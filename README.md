@@ -19,7 +19,7 @@ If the client sends `Prefer: respond-async`, the request is processed asynchrono
 - Prerequisites:
   - Docker (or Go 1.22+ if running from source)
   - GitHub Personal Access Token (PAT) with repo write access (for the GitHub target)
-  - Optional: an OpenAI-compatible endpoint (an ai-proxy reverse proxy or api.openai.com) if using `llm.provider: openai` (defaults to mock otherwise)
+  - Optional: an OpenAI-compatible endpoint (a reverse proxy or api.openai.com) if using `llm.provider: openai` (the default), or an Anthropic Messages endpoint (a reverse proxy exposing an `/anthropic` route or api.anthropic.com) if using `llm.provider: anthropic`
 
 ## Configure
 
@@ -30,8 +30,9 @@ If the client sends `Prefer: respond-async`, the request is processed asynchrono
   - Set `target.github.repositoryOwner`, `target.github.repositoryName`, `target.github.branch`
   - Provide `target.github.auth.token` (either paste the PAT or use `${GITHUB_TOKEN}`)
   - Choose LLM:
-    - Mock (default): `llm.provider: "mock"` works without external services
-    - OpenAI-compatible: set `llm.provider: "openai"`, `llm.openai.baseUrl` (an ai-proxy reverse proxy or `https://api.openai.com`), and `llm.openai.apiKey` (or `${OPENAI_API_KEY}`)
+    - OpenAI-compatible (default): set `llm.provider: "openai"`, `llm.openai.baseUrl` (a reverse proxy or `https://api.openai.com`), and `llm.openai.apiKey` (or `${OPENAI_API_KEY}`). Transcribes PNG/JPEG and PDF via the Responses API. `llm.openai.model` must be a model served over the Responses API (the `gpt-5` family, e.g. `gpt-5`, `gpt-5.4`, `gpt-5.5`); `gpt-4.1` and `gpt-5-mini` are Chat Completions only and will not work here.
+    - Anthropic: set `llm.provider: "anthropic"`, `llm.anthropic.baseUrl` (a reverse proxy exposing an `/anthropic` route or `https://api.anthropic.com`), and optionally `llm.anthropic.apiKey`. Transcribes PNG/JPEG and PDF natively.
+    - Mock: `llm.provider: "mock"` works without external services
 - Example snippet:
 
   ```yaml

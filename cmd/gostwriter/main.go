@@ -15,6 +15,7 @@ import (
 	appcfg "github.com/jo-hoe/gostwriter/internal/config"
 	"github.com/jo-hoe/gostwriter/internal/jobs"
 	"github.com/jo-hoe/gostwriter/internal/llm"
+	"github.com/jo-hoe/gostwriter/internal/llm/anthropic"
 	"github.com/jo-hoe/gostwriter/internal/llm/mock"
 	"github.com/jo-hoe/gostwriter/internal/llm/openai"
 	"github.com/jo-hoe/gostwriter/internal/naming"
@@ -123,6 +124,8 @@ func run() error {
 		llmClient = mock.New(cfg.LLM.Mock)
 	case "openai":
 		llmClient = openai.New(cfg.LLM.OpenAI)
+	case "anthropic":
+		llmClient = anthropic.New(cfg.LLM.Anthropic)
 	default:
 		return fmt.Errorf("unsupported llm provider %q", cfg.LLM.Provider)
 	}

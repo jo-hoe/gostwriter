@@ -40,17 +40,25 @@ Helm chart for deploying Gostwriter
 | ingress.enabled | bool | `false` | Enable Ingress |
 | ingress.hosts | list | `[{"host":"gostwriter.local","paths":[{"path":"/","pathType":"Prefix"}]}]` | Ingress host definitions |
 | ingress.tls | list | `[]` | TLS configuration for the Ingress |
+| llm.anthropic.apiKey | string | `""` | API key for the endpoint (optional; a proxy may inject its own) |
+| llm.anthropic.baseUrl | string | `"http://localhost:8900/anthropic"` | Base URL for the Anthropic Messages endpoint. Point this at a reverse proxy exposing an /anthropic route (e.g. http://localhost:8900/anthropic) or https://api.anthropic.com. |
+| llm.anthropic.instructions | string | `""` | Optional instructions prompt override |
+| llm.anthropic.maxTokens | int | `0` | Maximum tokens for responses (required by the API; 0 uses a 4096 default) |
+| llm.anthropic.model | string | `"anthropic--claude-4.5-sonnet"` | Model name to use |
+| llm.anthropic.systemPrompt | string | `""` | Optional system prompt override |
+| llm.anthropic.temperature | int | `0` | Sampling temperature |
+| llm.anthropic.timeout | string | `"0"` | HTTP client timeout for LLM requests (0 uses default of 5m) |
 | llm.mock.delay | string | `"2s"` | Artificial delay for mock responses |
 | llm.mock.prefix | string | `"Transcribed by Mock"` | Prefix added by the mock provider |
-| llm.openai.apiKey | string | `""` | API key / bearer token for the endpoint (optional; ai-proxy injects its own) |
-| llm.openai.baseUrl | string | `"http://localhost:8900"` | Base URL for the OpenAI-compatible endpoint. Point this at an ai-proxy reverse proxy (e.g. http://localhost:8900) or https://api.openai.com. |
+| llm.openai.apiKey | string | `""` | API key / bearer token for the endpoint (optional; a proxy may inject its own) |
+| llm.openai.baseUrl | string | `"http://localhost:8900"` | Base URL for the OpenAI-compatible endpoint. Point this at a reverse proxy (e.g. http://localhost:8900) or https://api.openai.com. |
 | llm.openai.instructions | string | `""` | Optional instructions prompt override |
 | llm.openai.maxTokens | int | `0` | Maximum tokens for responses (0 uses provider default) |
-| llm.openai.model | string | `"gpt-5"` | Model name to use |
+| llm.openai.model | string | `"gpt-5"` | Model name to use. Must be a model served over the Responses API (the gpt-5 family, e.g. gpt-5, gpt-5.4, gpt-5.5). gpt-4.1 and gpt-5-mini are Chat Completions only and will not work here. |
 | llm.openai.systemPrompt | string | `""` | Optional system prompt override |
 | llm.openai.temperature | int | `0` | Sampling temperature |
 | llm.openai.timeout | string | `"0"` | HTTP client timeout for LLM requests (0 uses default of 5m) |
-| llm.provider | string | `"mock"` | Provider selection: "mock" or "openai" |
+| llm.provider | string | `"openai"` | Provider selection: "mock", "openai", or "anthropic". openai is the default and transcribes images and PDFs via the Responses API; anthropic transcribes images and PDFs natively via document blocks. |
 | nameOverride | string | `""` | Partially override the chart name |
 | nodeSelector | object | `{}` | Node selector for Pod assignment |
 | persistence | object | `{"accessModes":["ReadWriteOnce"],"enabled":false,"existingClaim":"","size":"1Gi","storageClass":""}` | Persistence for /app/data (SQLite DB and git clone cache) |

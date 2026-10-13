@@ -130,15 +130,17 @@ server:
   callbackBackoff: 2s
 
 llm:
-  # -- Provider selection: "mock" or "openai"
-  provider: "mock"
+  # -- Provider selection: "mock", "openai", or "anthropic".
+  # openai is the default and transcribes images and PDFs via the Responses API;
+  # anthropic transcribes images and PDFs natively via document blocks.
+  provider: "openai"
   openai:
-    # -- Base URL for the OpenAI-compatible endpoint. Point this at an ai-proxy
-    # -- reverse proxy (e.g. http://localhost:8900) or https://api.openai.com.
+    # -- Base URL for the OpenAI-compatible endpoint. Point this at a reverse
+    # -- proxy (e.g. http://localhost:8900) or https://api.openai.com.
     baseUrl: "http://localhost:8900"
-    # -- API key / bearer token for the endpoint (optional; ai-proxy injects its own)
+    # -- API key / bearer token for the endpoint (optional; a proxy may inject its own)
     apiKey: ""
-    # -- Model name to use
+    # -- Model name to use. Must be a model served over the Responses API (the gpt-5 family, e.g. gpt-5, gpt-5.4, gpt-5.5). gpt-4.1 and gpt-5-mini are Chat Completions only and will not work here.
     model: "gpt-5"
     # -- Optional system prompt override
     systemPrompt: ""
@@ -147,6 +149,25 @@ llm:
     # -- Sampling temperature
     temperature: 0
     # -- Maximum tokens for responses (0 uses provider default)
+    maxTokens: 0
+    # -- HTTP client timeout for LLM requests (0 uses default of 5m)
+    timeout: "0"
+  anthropic:
+    # -- Base URL for the Anthropic Messages endpoint. Point this at a reverse
+    # -- proxy exposing an /anthropic route (e.g. http://localhost:8900/anthropic)
+    # -- or https://api.anthropic.com.
+    baseUrl: "http://localhost:8900/anthropic"
+    # -- API key for the endpoint (optional; a proxy may inject its own)
+    apiKey: ""
+    # -- Model name to use
+    model: "anthropic--claude-4.5-sonnet"
+    # -- Optional system prompt override
+    systemPrompt: ""
+    # -- Optional instructions prompt override
+    instructions: ""
+    # -- Sampling temperature
+    temperature: 0
+    # -- Maximum tokens for responses (required by the API; 0 uses a 4096 default)
     maxTokens: 0
     # -- HTTP client timeout for LLM requests (0 uses default of 5m)
     timeout: "0"

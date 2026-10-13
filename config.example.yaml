@@ -21,13 +21,33 @@ server:
   logLevel: "info"
 
 llm:
+  # provider: "openai" (default, transcribes images and PDFs via the Responses
+  # API), "anthropic" (transcribes PDFs natively via document blocks), or "mock".
   provider: "openai"
-  openai:
-    # Point baseUrl at an ai-proxy reverse proxy or directly at https://api.openai.com.
+  anthropic:
+    # Point baseUrl at a reverse proxy exposing an /anthropic route or directly at
+    # https://api.anthropic.com.
     # When running via Docker Compose, use host.docker.internal to reach services on the host machine.
     # This resolves to the host gateway on Docker Desktop and on Linux with Docker 20.10+.
+    baseUrl: "http://host.docker.internal:8900/anthropic"
+    apiKey: "${ANTHROPIC_API_KEY}"
+    model: "anthropic--claude-4.5-sonnet"
+    systemPrompt: ""
+    instructions: ""
+    temperature: 0
+    # Required by the API; 0 uses a 4096 default.
+    maxTokens: 0
+  openai:
+    # Point baseUrl at a reverse proxy or directly at https://api.openai.com.
+    # When running via Docker Compose, use host.docker.internal to reach services on the host machine.
+    # This resolves to the host gateway on Docker Desktop and on Linux with Docker 20.10+.
+    # The openai provider transcribes images and PDFs via the Responses API.
     baseUrl: "http://host.docker.internal:8900"
     apiKey: "${OPENAI_API_KEY}"
+    # Must be a model served over the Responses API (the gpt-5 family, e.g. gpt-5,
+    # gpt-5.4, gpt-5.5). gpt-4.1 and gpt-5-mini are Chat Completions only and will
+    # not work here. Choosing an unsupported model surfaces as a runtime
+    # transcription error.
     model: "gpt-5"
     systemPrompt: ""
     instructions: ""
