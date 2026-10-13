@@ -1,3 +1,4 @@
+// Package util provides shared utilities for gostwriter.
 package util
 
 import (

@@ -1,3 +1,4 @@
+// Package storage handles file upload and temporary storage for gostwriter.
 package storage
 
 import (

@@ -1,3 +1,4 @@
+// Package config loads and validates gostwriter configuration from YAML.
 package config
 
 import (
@@ -193,7 +194,7 @@ func Load(path string) (*Config, error) {
 		}
 	}
 	cleanPath := filepath.Clean(path)
-	data, err := os.ReadFile(cleanPath) // #nosec G304 - reading sanitized config file path is expected
+	data, err := os.ReadFile(cleanPath) // #nosec G304 G703 -- reading sanitized config file path is expected
 	if err != nil {
 		return nil, fmt.Errorf("read config: %w", err)
 	}
@@ -374,7 +375,7 @@ func normalizePathPrefix(p string) string {
 	}
 	p = strings.ReplaceAll(p, "\\", "/")
 	if !strings.HasSuffix(p, "/") {
-		p = p + "/"
+		p += "/"
 	}
 	// Remove leading "./"
 	p = strings.TrimPrefix(p, "./")

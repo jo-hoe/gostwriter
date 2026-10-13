@@ -1,6 +1,5 @@
+// Package common provides shared constants for gostwriter to enforce DRY and avoid magic strings/numbers.
 package common
-
-// Shared constants to enforce DRY and avoid magic strings/numbers.
 
 // HTTP headers and content types
 const (

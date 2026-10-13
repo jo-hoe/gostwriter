@@ -42,6 +42,7 @@ const (
 // Role is the sender role for a chat message.
 type Role string
 
+// Role constants for chat message senders.
 const (
 	RoleSystem    Role = "system"
 	RoleUser      Role = "user"
@@ -51,6 +52,7 @@ const (
 // PartType is the type discriminator for a multimodal message part.
 type PartType string
 
+// PartType constants for multimodal message parts.
 const (
 	PartText     PartType = "text"
 	PartImageURL PartType = "image_url"
@@ -171,7 +173,7 @@ func (c *Client) Complete(ctx context.Context, req Request) (string, error) {
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return "", fmt.Errorf("chat: %w", ctx.Err())
 		}
 		return "", fmt.Errorf("http do: %w", err)
 	}

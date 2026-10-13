@@ -1,3 +1,4 @@
+// Package processor implements the transcription worker.
 package processor
 
 import (
@@ -35,6 +36,7 @@ type Worker struct {
 // Ensure Worker implements jobs.Processor
 var _ jobs.Processor = (*Worker)(nil)
 
+// New creates a Worker with the given dependencies.
 func New(log *slog.Logger, cfg *config.Config, store jobs.Store, c llm.Client, regs *targets.Registry) *Worker {
 	return &Worker{
 		Log:     log,
@@ -45,10 +47,12 @@ func New(log *slog.Logger, cfg *config.Config, store jobs.Store, c llm.Client, r
 	}
 }
 
+// Process handles a single transcription job: open the image, transcribe it,
+// post to the configured target, and fire the callback when done.
 func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 	job := item.Job
 	now := time.Now().UTC()
-	if err := w.Store.UpdateStage(job.ID, jobs.StageTranscribing, &now); err != nil {
+	if err := w.Store.UpdateStage(ctx, job.ID, jobs.StageTranscribing, &now); err != nil {
 		return fmt.Errorf("update stage to transcribing: %w", err)
 	}
 	if w.Log != nil {
@@ -57,21 +61,24 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 
 	f, err := os.Open(job.ImagePath)
 	if err != nil {
-		w.finishWithError(job.ID, fmt.Errorf("open image: %w", err))
-		return err
+		openErr := fmt.Errorf("open image: %w", err)
+		w.finishWithError(job.ID, openErr)
+		return openErr
 	}
 	defer func() { _ = f.Close() }()
 
 	data, err := io.ReadAll(f)
 	if err != nil {
-		w.finishWithError(job.ID, fmt.Errorf("read image: %w", err))
-		return err
+		readErr := fmt.Errorf("read image: %w", err)
+		w.finishWithError(job.ID, readErr)
+		return readErr
 	}
 
 	md, conv, err := w.LLM.TranscribeImage(ctx, bytes.NewReader(data), job.MimeType)
 	if err != nil {
-		w.finishWithError(job.ID, fmt.Errorf("llm transcribe: %w", err))
-		return err
+		transcribeErr := fmt.Errorf("llm transcribe: %w", err)
+		w.finishWithError(job.ID, transcribeErr)
+		return transcribeErr
 	}
 	if w.Log != nil {
 		w.Log.Info("transcription completed", "job_id", job.ID)
@@ -93,9 +100,10 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 
 	// Posting stage
 	startPost := time.Now().UTC()
-	if err := w.Store.UpdateStage(job.ID, jobs.StagePosting, &startPost); err != nil {
-		w.finishWithError(job.ID, fmt.Errorf("update stage to posting: %w", err))
-		return err
+	if err := w.Store.UpdateStage(ctx, job.ID, jobs.StagePosting, &startPost); err != nil {
+		stageErr := fmt.Errorf("update stage to posting: %w", err)
+		w.finishWithError(job.ID, stageErr)
+		return stageErr
 	}
 	if w.Log != nil {
 		w.Log.Info("job posting", "job_id", job.ID, "target", job.TargetName)
@@ -125,8 +133,9 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 
 	res, err := t.Post(ctx, req)
 	if err != nil {
-		w.finishWithError(job.ID, fmt.Errorf("target post: %w", err))
-		return err
+		postErr := fmt.Errorf("target post: %w", err)
+		w.finishWithError(job.ID, postErr)
+		return postErr
 	}
 	if w.Log != nil {
 		w.Log.Info("post completed", "job_id", job.ID, "target", res.TargetName, "location", res.Location, "commit", res.Commit)
@@ -134,7 +143,7 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 
 	// Success
 	done := time.Now().UTC()
-	if err := w.Store.SaveResult(job.ID, res.Location, res.Commit, done); err != nil {
+	if err := w.Store.SaveResult(ctx, job.ID, res.Location, res.Commit, done); err != nil {
 		return fmt.Errorf("save result: %w", err)
 	}
 	if w.Log != nil {
@@ -164,7 +173,7 @@ func (w *Worker) Process(ctx context.Context, item jobs.WorkItem) error {
 
 func (w *Worker) finishWithError(jobID string, err error) {
 	done := time.Now().UTC()
-	_ = w.Store.SaveError(jobID, err.Error(), done)
+	_ = w.Store.SaveError(context.Background(), jobID, err.Error(), done)
 	if w.Log != nil {
 		w.Log.Error("job failed", "job_id", jobID, "error", err)
 	}
@@ -216,9 +225,9 @@ type callbackResult struct {
 }
 
 func (w *Worker) sendCallbackWithRetry(ctx context.Context, url string, payload callbackPayload) error {
-	max := w.Cfg.Server.CallbackRetries
-	if max <= 0 {
-		max = 3
+	maxRetries := w.Cfg.Server.CallbackRetries
+	if maxRetries <= 0 {
+		maxRetries = 3
 	}
 	backoff := w.Cfg.Server.CallbackBackoff
 	if backoff <= 0 {
@@ -226,7 +235,7 @@ func (w *Worker) sendCallbackWithRetry(ctx context.Context, url string, payload 
 	}
 
 	var lastErr error
-	for attempt := 1; attempt <= max; attempt++ {
+	for attempt := 1; attempt <= maxRetries; attempt++ {
 		if err := w.postJSON(ctx, url, payload); err != nil {
 			lastErr = err
 			// If context was cancelled, stop retries.
@@ -245,18 +254,18 @@ func (w *Worker) sendCallbackWithRetry(ctx context.Context, url string, payload 
 func (w *Worker) postJSON(ctx context.Context, url string, payload any) error {
 	b, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal callback payload: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
 	if err != nil {
-		return err
+		return fmt.Errorf("build callback request: %w", err)
 	}
 	req.Header.Set("Content-Type", common.ContentTypeJSON)
 	// Optional: include a simple signature or key if required in future
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("send callback: %w", err)
 	}
 	if resp.Body != nil {
 		defer func() { _ = resp.Body.Close() }()

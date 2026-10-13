@@ -9,7 +9,7 @@ func strPtr(s string) *string { return &s }
 
 func TestAINamer_Name_UsesSuggestedSlug(t *testing.T) {
 	n := NewAINamer("", ".md")
-	got, err := n.Name(NamingRequest{
+	got, err := n.Name(Request{
 		JobID:         "job-1",
 		Timestamp:     time.Date(2024, 11, 1, 14, 32, 0, 0, time.UTC),
 		SuggestedSlug: strPtr("invoice-november"),
@@ -24,7 +24,7 @@ func TestAINamer_Name_UsesSuggestedSlug(t *testing.T) {
 
 func TestAINamer_Name_FallsBackToJobID(t *testing.T) {
 	n := NewAINamer("", ".md")
-	got, err := n.Name(NamingRequest{
+	got, err := n.Name(Request{
 		JobID:     "job-xyz",
 		Timestamp: time.Date(2024, 11, 1, 14, 32, 0, 0, time.UTC),
 	})
@@ -38,7 +38,7 @@ func TestAINamer_Name_FallsBackToJobID(t *testing.T) {
 
 func TestAINamer_Name_BlankSuggestedSlugFallsBack(t *testing.T) {
 	n := NewAINamer("", ".md")
-	got, err := n.Name(NamingRequest{
+	got, err := n.Name(Request{
 		JobID:         "job-xyz",
 		Timestamp:     time.Date(2024, 11, 1, 14, 32, 0, 0, time.UTC),
 		SuggestedSlug: strPtr("   "),
@@ -53,7 +53,7 @@ func TestAINamer_Name_BlankSuggestedSlugFallsBack(t *testing.T) {
 
 func TestAINamer_Name_AppliesBasePath(t *testing.T) {
 	n := NewAINamer("notes/scanned", ".md")
-	got, err := n.Name(NamingRequest{
+	got, err := n.Name(Request{
 		JobID:         "job-1",
 		Timestamp:     time.Date(2024, 11, 1, 14, 32, 0, 0, time.UTC),
 		SuggestedSlug: strPtr("invoice"),
@@ -68,7 +68,7 @@ func TestAINamer_Name_AppliesBasePath(t *testing.T) {
 
 func TestAINamer_Name_DefaultsExtension(t *testing.T) {
 	n := NewAINamer("", "")
-	got, err := n.Name(NamingRequest{
+	got, err := n.Name(Request{
 		JobID:         "job-1",
 		Timestamp:     time.Date(2024, 11, 1, 14, 32, 0, 0, time.UTC),
 		SuggestedSlug: strPtr("invoice"),

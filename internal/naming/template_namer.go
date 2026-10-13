@@ -29,7 +29,8 @@ func NewTemplateNamer(tplStr, defaultTpl, basePath string) (*TemplateNamer, erro
 	return &TemplateNamer{tpl: tpl, basePath: basePath}, nil
 }
 
-func (n *TemplateNamer) Name(req NamingRequest) (string, error) {
+// Name renders the filename template using the provided request data.
+func (n *TemplateNamer) Name(req Request) (string, error) {
 	data := map[string]any{
 		"JobID":     req.JobID,
 		"Timestamp": req.Timestamp,

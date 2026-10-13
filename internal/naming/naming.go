@@ -1,3 +1,4 @@
+// Package naming provides file naming strategies for transcription output.
 package naming
 
 import (
@@ -5,8 +6,8 @@ import (
 	"time"
 )
 
-// NamingRequest carries all data a FileNamer may need to produce a path.
-type NamingRequest struct {
+// Request carries all data a FileNamer may need to produce a path.
+type Request struct {
 	JobID         string
 	Timestamp     time.Time
 	SuggestedSlug *string
@@ -17,7 +18,7 @@ type NamingRequest struct {
 
 // FileNamer produces a repository-relative file path for a given request.
 type FileNamer interface {
-	Name(req NamingRequest) (string, error)
+	Name(req Request) (string, error)
 }
 
 // PathChecker reports whether a path already exists in the target repository.

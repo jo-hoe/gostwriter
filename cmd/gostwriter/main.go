@@ -1,3 +1,4 @@
+// Package main is the gostwriter server entry point.
 package main
 
 import (
@@ -67,6 +68,13 @@ func buildFileNamer(cfg appcfg.GitHubTargetConfig, httpClient *http.Client) (nam
 }
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error("fatal", "err", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	// Provisional logger during early startup
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
@@ -74,8 +82,7 @@ func main() {
 	// Load config
 	cfg, err := appcfg.Load("")
 	if err != nil {
-		logger.Error("load config", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("load config: %w", err)
 	}
 
 	// Reconfigure logger with configured level
@@ -86,8 +93,7 @@ func main() {
 	// Store (SQLite)
 	store, err := jobs.NewSQLiteStore(cfg.Server.DatabasePath)
 	if err != nil {
-		logger.Error("sqlite open", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("sqlite open: %w", err)
 	}
 	defer func() { _ = store.Close() }()
 
@@ -99,18 +105,15 @@ func main() {
 	if cfg.Target.GitHub.Enabled {
 		namer, err := buildFileNamer(cfg.Target.GitHub, http.DefaultClient)
 		if err != nil {
-			logger.Error("build file namer", "err", err)
-			os.Exit(1)
+			return fmt.Errorf("build file namer: %w", err)
 		}
 		t, err := githubTarget.New("github", cfg.Target.GitHub, namer)
 		if err != nil {
-			logger.Error("init github target", "err", err)
-			os.Exit(1)
+			return fmt.Errorf("init github target: %w", err)
 		}
 		reg.Add(t)
 	} else {
-		logger.Error("no enabled target configured")
-		os.Exit(1)
+		return fmt.Errorf("no enabled target configured")
 	}
 
 	// LLM client
@@ -121,8 +124,7 @@ func main() {
 	case "openai":
 		llmClient = openai.New(cfg.LLM.OpenAI)
 	default:
-		logger.Error("unsupported llm provider", "provider", cfg.LLM.Provider)
-		os.Exit(1)
+		return fmt.Errorf("unsupported llm provider %q", cfg.LLM.Provider)
 	}
 
 	// Worker and queue
@@ -131,8 +133,7 @@ func main() {
 	rootCtx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	if err := queue.Start(rootCtx, worker); err != nil {
-		logger.Error("start queue", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("start queue: %w", err)
 	}
 
 	// HTTP server
@@ -176,4 +177,5 @@ func main() {
 	// Stop workers
 	queue.Shutdown(cfg.Server.ShutdownGrace)
 	logger.Info("server stopped")
+	return nil
 }

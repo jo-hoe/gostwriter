@@ -18,7 +18,7 @@ import (
 // stubNamer returns a fixed path regardless of the request.
 type stubNamer struct{ path string }
 
-func (s *stubNamer) Name(_ naming.NamingRequest) (string, error) { return s.path, nil }
+func (s *stubNamer) Name(_ naming.Request) (string, error) { return s.path, nil }
 
 func boolPtr(b bool) *bool { return &b }
 

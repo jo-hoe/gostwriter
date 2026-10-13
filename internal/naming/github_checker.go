@@ -18,6 +18,7 @@ type GitHubPathChecker struct {
 	token      string
 }
 
+// NewGitHubPathChecker creates a GitHubPathChecker for the given repository.
 func NewGitHubPathChecker(httpClient *http.Client, apiBase, owner, repo, branch, token string) *GitHubPathChecker {
 	return &GitHubPathChecker{
 		httpClient: httpClient,
@@ -29,6 +30,7 @@ func NewGitHubPathChecker(httpClient *http.Client, apiBase, owner, repo, branch,
 	}
 }
 
+// Exists reports whether repoPath already exists in the repository at the configured branch.
 func (c *GitHubPathChecker) Exists(ctx context.Context, repoPath string) (bool, error) {
 	url := fmt.Sprintf("%s/repos/%s/%s/contents/%s?ref=%s",
 		c.apiBase, c.owner, c.repo, repoPath, c.branch)

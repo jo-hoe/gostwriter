@@ -1,3 +1,4 @@
+// Package targets defines the target interface and request/result types for posting transcriptions.
 package targets
 
 import (
@@ -45,19 +46,23 @@ type Registry struct {
 	byName map[string]Target
 }
 
+// NewRegistry creates an empty target Registry.
 func NewRegistry() *Registry {
 	return &Registry{byName: make(map[string]Target)}
 }
 
+// Add registers a target by its name.
 func (r *Registry) Add(t Target) {
 	r.byName[t.Name()] = t
 }
 
+// Get returns the target with the given name, and whether it was found.
 func (r *Registry) Get(name string) (Target, bool) {
 	t, ok := r.byName[name]
 	return t, ok
 }
 
+// Names returns the names of all registered targets.
 func (r *Registry) Names() []string {
 	out := make([]string, 0, len(r.byName))
 	for k := range r.byName {

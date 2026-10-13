@@ -30,7 +30,7 @@ func newMemStore() *memStore {
 	return &memStore{data: make(map[string]*jobs.Job)}
 }
 
-func (s *memStore) CreateJob(job *jobs.Job) error {
+func (s *memStore) CreateJob(_ context.Context, job *jobs.Job) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cpy := *job
@@ -38,7 +38,7 @@ func (s *memStore) CreateJob(job *jobs.Job) error {
 	return nil
 }
 
-func (s *memStore) UpdateStage(id string, stage jobs.Stage, startedAt *time.Time) error {
+func (s *memStore) UpdateStage(_ context.Context, id string, stage jobs.Stage, startedAt *time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if j, ok := s.data[id]; ok {
@@ -52,7 +52,7 @@ func (s *memStore) UpdateStage(id string, stage jobs.Stage, startedAt *time.Time
 	return nil
 }
 
-func (s *memStore) SaveResult(id string, location, commit string, completedAt time.Time) error {
+func (s *memStore) SaveResult(_ context.Context, id string, location, commit string, completedAt time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if j, ok := s.data[id]; ok {
@@ -68,7 +68,7 @@ func (s *memStore) SaveResult(id string, location, commit string, completedAt ti
 	return nil
 }
 
-func (s *memStore) SaveError(id string, errMsg string, completedAt time.Time) error {
+func (s *memStore) SaveError(_ context.Context, id string, errMsg string, completedAt time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if j, ok := s.data[id]; ok {
@@ -82,7 +82,7 @@ func (s *memStore) SaveError(id string, errMsg string, completedAt time.Time) er
 	return nil
 }
 
-func (s *memStore) GetJob(id string) (*jobs.Job, error) {
+func (s *memStore) GetJob(_ context.Context, id string) (*jobs.Job, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if j, ok := s.data[id]; ok {
@@ -100,7 +100,7 @@ type fakeProcessor struct {
 
 func (p *fakeProcessor) Process(ctx context.Context, item jobs.WorkItem) error {
 	// Simulate synchronous completion by marking the job complete
-	return p.store.SaveResult(item.Job.ID, "git:loc", "deadbeef", time.Now().UTC())
+	return p.store.SaveResult(context.Background(), item.Job.ID, "git:loc", "deadbeef", time.Now().UTC())
 }
 
 func TestHealthz(t *testing.T) {

@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -37,23 +38,23 @@ func TestSQLiteStore_JobLifecycle(t *testing.T) {
 		t.Fatalf("write img: %v", err)
 	}
 
-	if err := store.CreateJob(job); err != nil {
+	if err := store.CreateJob(context.Background(), job); err != nil {
 		t.Fatalf("CreateJob: %v", err)
 	}
 
 	// Update stage to transcribing with startedAt
 	start := now.Add(1 * time.Second)
-	if err := store.UpdateStage(job.ID, StageTranscribing, &start); err != nil {
+	if err := store.UpdateStage(context.Background(), job.ID, StageTranscribing, &start); err != nil {
 		t.Fatalf("UpdateStage: %v", err)
 	}
 
 	// Save result to mark completed
 	comp := now.Add(2 * time.Second)
-	if err := store.SaveResult(job.ID, "git:loc", "deadbeef", comp); err != nil {
+	if err := store.SaveResult(context.Background(), job.ID, "git:loc", "deadbeef", comp); err != nil {
 		t.Fatalf("SaveResult: %v", err)
 	}
 
-	got, err := store.GetJob(job.ID)
+	got, err := store.GetJob(context.Background(), job.ID)
 	if err != nil {
 		t.Fatalf("GetJob: %v", err)
 	}
@@ -69,10 +70,10 @@ func TestSQLiteStore_JobLifecycle(t *testing.T) {
 
 	// Save error to mark failed
 	failTime := now.Add(3 * time.Second)
-	if err := store.SaveError(job.ID, "boom", failTime); err != nil {
+	if err := store.SaveError(context.Background(), job.ID, "boom", failTime); err != nil {
 		t.Fatalf("SaveError: %v", err)
 	}
-	got2, err := store.GetJob(job.ID)
+	got2, err := store.GetJob(context.Background(), job.ID)
 	if err != nil {
 		t.Fatalf("GetJob after error: %v", err)
 	}

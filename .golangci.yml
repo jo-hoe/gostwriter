@@ -1,0 +1,46 @@
+# golangci-lint configuration
+# https://golangci-lint.run/usage/configuration/
+version: "2"
+
+linters:
+  enable:
+    # --- original Makefile linters ---
+    - dupl          # code duplication detection
+    - gocyclo       # cyclomatic complexity
+    - gosec         # security checks (G-rules)
+    - misspell      # spelling mistakes in comments/strings
+    - sqlclosecheck # sql.Rows/Stmt close check
+    # --- additional linters ---
+    - bodyclose     # HTTP response body not closed
+    - exhaustive    # missing switch cases on enum types
+    - gocritic      # broad style/performance/correctness checks
+    - noctx         # HTTP requests/db calls without context.Context
+    - revive        # drop-in golint replacement
+    - unconvert     # unnecessary type conversions
+    - wrapcheck     # errors from external packages should be wrapped
+
+  settings:
+    gocyclo:
+      min-complexity: 30
+
+    dupl:
+      threshold: 150
+
+    exhaustive:
+      # A default case counts as handling all values.
+      default-signifies-exhaustive: true
+
+  exclusions:
+    rules:
+      # Test files: relax noctx (httptest.NewRequest is idiomatic in tests),
+      # revive doc/comment requirements, and wrapcheck (test helpers don't need wrapping).
+      - path: "_test\\.go$"
+        linters:
+          - noctx
+          - revive
+          - wrapcheck
+          - dupl
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

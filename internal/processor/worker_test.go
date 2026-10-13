@@ -30,7 +30,7 @@ func newMemStore() *memStore {
 	return &memStore{jobs: make(map[string]*jobs.Job)}
 }
 
-func (s *memStore) CreateJob(job *jobs.Job) error {
+func (s *memStore) CreateJob(_ context.Context, job *jobs.Job) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c := *job
@@ -38,7 +38,7 @@ func (s *memStore) CreateJob(job *jobs.Job) error {
 	return nil
 }
 
-func (s *memStore) UpdateStage(id string, stage jobs.Stage, startedAt *time.Time) error {
+func (s *memStore) UpdateStage(_ context.Context, id string, stage jobs.Stage, startedAt *time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if j, ok := s.jobs[id]; ok {
@@ -51,7 +51,7 @@ func (s *memStore) UpdateStage(id string, stage jobs.Stage, startedAt *time.Time
 	return nil
 }
 
-func (s *memStore) SaveResult(id string, location, commit string, completedAt time.Time) error {
+func (s *memStore) SaveResult(_ context.Context, id string, location, commit string, completedAt time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if j, ok := s.jobs[id]; ok {
@@ -66,7 +66,7 @@ func (s *memStore) SaveResult(id string, location, commit string, completedAt ti
 	return nil
 }
 
-func (s *memStore) SaveError(id string, errMsg string, completedAt time.Time) error {
+func (s *memStore) SaveError(_ context.Context, id string, errMsg string, completedAt time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if j, ok := s.jobs[id]; ok {
@@ -79,7 +79,7 @@ func (s *memStore) SaveError(id string, errMsg string, completedAt time.Time) er
 	return nil
 }
 
-func (s *memStore) GetJob(id string) (*jobs.Job, error) {
+func (s *memStore) GetJob(_ context.Context, id string) (*jobs.Job, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if j, ok := s.jobs[id]; ok {
@@ -210,14 +210,14 @@ func TestWorker_Process_SuccessWithCallback(t *testing.T) {
 		Stage:       jobs.StageQueued,
 		CreatedAt:   time.Now().UTC(),
 	}
-	_ = store.CreateJob(&job)
+	_ = store.CreateJob(context.Background(), &job)
 
 	// Process
 	if err := worker.Process(context.Background(), jobs.WorkItem{Job: job}); err != nil {
 		t.Fatalf("Process error: %v", err)
 	}
 
-	got, _ := store.GetJob(job.ID)
+	got, _ := store.GetJob(context.Background(), job.ID)
 	if got == nil || got.Stage != jobs.StageCompleted {
 		t.Fatalf("job not completed: %+v", got)
 	}
@@ -272,13 +272,13 @@ func TestWorker_Process_LLMError_SetsFailed(t *testing.T) {
 		Stage:      jobs.StageQueued,
 		CreatedAt:  time.Now().UTC(),
 	}
-	_ = store.CreateJob(&job)
+	_ = store.CreateJob(context.Background(), &job)
 
 	// Process (should fail)
 	if err := worker.Process(context.Background(), jobs.WorkItem{Job: job}); err == nil {
 		t.Fatalf("expected error")
 	}
-	got, _ := store.GetJob(job.ID)
+	got, _ := store.GetJob(context.Background(), job.ID)
 	if got == nil || got.Stage != jobs.StageFailed {
 		t.Fatalf("job not failed: %+v", got)
 	}
@@ -329,7 +329,7 @@ func TestWorker_PopulatesOriginal_WhenArchiveEnabled(t *testing.T) {
 		ID: "ja", ImagePath: makeTempImage(t), MimeType: common.MimeImagePNG,
 		TargetName: "github", Stage: jobs.StageQueued, CreatedAt: time.Now().UTC(),
 	}
-	_ = store.CreateJob(&job)
+	_ = store.CreateJob(context.Background(), &job)
 
 	if err := worker.Process(context.Background(), jobs.WorkItem{Job: job}); err != nil {
 		t.Fatalf("Process: %v", err)
@@ -353,7 +353,7 @@ func TestWorker_OriginalNil_WhenArchiveDisabled(t *testing.T) {
 		ID: "jb", ImagePath: makeTempImage(t), MimeType: common.MimeImagePNG,
 		TargetName: "github", Stage: jobs.StageQueued, CreatedAt: time.Now().UTC(),
 	}
-	_ = store.CreateJob(&job)
+	_ = store.CreateJob(context.Background(), &job)
 
 	if err := worker.Process(context.Background(), jobs.WorkItem{Job: job}); err != nil {
 		t.Fatalf("Process: %v", err)
@@ -393,7 +393,7 @@ func runAINamingJob(t *testing.T, llmClient *llmMock) *capturingTarget {
 		ID: "jn", ImagePath: makeTempImage(t), MimeType: common.MimeImagePNG,
 		TargetName: "github", Stage: jobs.StageQueued, CreatedAt: time.Now().UTC(),
 	}
-	_ = store.CreateJob(&job)
+	_ = store.CreateJob(context.Background(), &job)
 	if err := worker.Process(context.Background(), jobs.WorkItem{Job: job}); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
@@ -457,7 +457,7 @@ func TestWorker_AINaming_SkippedForNonAIStrategy(t *testing.T) {
 		ID: "jt", ImagePath: makeTempImage(t), MimeType: common.MimeImagePNG,
 		TargetName: "github", Stage: jobs.StageQueued, CreatedAt: time.Now().UTC(),
 	}
-	_ = store.CreateJob(&job)
+	_ = store.CreateJob(context.Background(), &job)
 	if err := worker.Process(context.Background(), jobs.WorkItem{Job: job}); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
