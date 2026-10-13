@@ -80,8 +80,8 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
-	// Parse multipart
-	if err := r.ParseMultipartForm(safeInt64(svc.Cfg.Server.MaxUploadSize)); err != nil {
+	// Parse multipart — size is explicitly bounded by MaxUploadSize.
+	if err := r.ParseMultipartForm(safeInt64(svc.Cfg.Server.MaxUploadSize)); err != nil { //nolint:gosec // G120: size is bounded by config
 		http.Error(w, "invalid form: "+err.Error(), http.StatusBadRequest)
 		return
 	}

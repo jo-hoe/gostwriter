@@ -1,0 +1,27 @@
+# golangci-lint configuration
+# https://golangci-lint.run/usage/configuration/
+version: "2"
+
+linters:
+  # Enable specific linters on top of the defaults.
+  enable:
+    - dupl          # code duplication detection
+    - gocyclo       # cyclomatic complexity
+    - gosec         # security checks (G-rules)
+    - misspell      # spelling mistakes in comments/strings
+    - sqlclosecheck # sql.Rows/Stmt close check
+
+linters-settings:
+  gocyclo:
+    # Maximum cyclomatic complexity before a function is flagged.
+    min-complexity: 30
+
+  dupl:
+    # Minimum token sequence size considered as duplicate.
+    threshold: 150
+
+issues:
+  # Maximum number of issues per linter (0 = unlimited).
+  max-issues-per-linter: 0
+  # Maximum number of same issues (0 = unlimited).
+  max-same-issues: 0
