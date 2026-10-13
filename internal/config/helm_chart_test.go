@@ -55,16 +55,22 @@ func TestHelmChartDefaultConfigParses(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			// Point storageDir at a writable temp dir: Load() calls MkdirAll on
+			// it, and the chart default (/app) is not writable under the CI
+			// test user. This test guards timeout YAML parsing, not storage.
 			args := append(append([]string{}, common...), tc.args...)
+			args = append(args, "--set", "server.storageDir="+filepath.ToSlash(dir))
 			// #nosec G204 -- helm is resolved via LookPath and all args are
-			// test-controlled constants; no user input reaches this command.
+			// test-controlled (constants + a t.TempDir path); no user input
+			// reaches this command.
 			out, err := exec.Command(helm, args...).CombinedOutput()
 			if err != nil {
 				t.Fatalf("helm template failed: %v\n%s", err, out)
 			}
 
 			configYAML := extractRenderedConfig(t, out)
-			tmp := filepath.Join(t.TempDir(), "config.yaml")
+			tmp := filepath.Join(dir, "config.yaml")
 			if err := os.WriteFile(tmp, []byte(configYAML), 0o600); err != nil {
 				t.Fatalf("write rendered config: %v", err)
 			}
