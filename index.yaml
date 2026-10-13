@@ -2,6 +2,18 @@ apiVersion: v1
 entries:
   gostwriter:
   - apiVersion: v2
+    appVersion: 2.0.0
+    created: "2026-10-13T18:09:48.264480761Z"
+    description: Helm chart for deploying Gostwriter
+    digest: 893e7647061988349c8cb593030498b7544fa9a99c81339e7467f29a76a6257d
+    name: gostwriter
+    sources:
+    - https://github.com/jo-hoe/gostwriter
+    type: application
+    urls:
+    - https://github.com/jo-hoe/gostwriter/releases/download/gostwriter-2.0.0/gostwriter-2.0.0.tgz
+    version: 2.0.0
+  - apiVersion: v2
     appVersion: 1.0.0
     created: "2026-10-12T20:33:29.263054216Z"
     description: Helm chart for deploying Gostwriter
@@ -187,4 +199,4 @@ entries:
     urls:
     - https://github.com/jo-hoe/gostwriter/releases/download/gostwriter-0.0.1/gostwriter-0.0.1.tgz
     version: 0.0.1
-generated: "2026-10-12T20:33:29.263100133Z"
+generated: "2026-10-13T18:09:48.264750287Z"
