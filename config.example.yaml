@@ -37,6 +37,9 @@ llm:
     temperature: 0
     # Required by the API; 0 uses a 4096 default.
     maxTokens: 0
+    # HTTP client timeout for LLM requests as a Go duration string (e.g. "90s",
+    # "2m", "5m"). Omit or set "0" to use the 5m default.
+    timeout: "0"
   openai:
     # Point baseUrl at a reverse proxy or directly at https://api.openai.com.
     # When running via Docker Compose, use host.docker.internal to reach services on the host machine.
@@ -53,6 +56,9 @@ llm:
     instructions: ""
     temperature: 0
     maxTokens: 0
+    # HTTP client timeout for LLM requests as a Go duration string (e.g. "90s",
+    # "2m", "5m"). Omit or set "0" to use the 5m default.
+    timeout: "0"
   mock:
     delay: 2s
     prefix: "Transcribed by Mock"
