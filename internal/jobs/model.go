@@ -22,7 +22,6 @@ type Job struct {
 	MimeType       string         // image mime (image/png, image/jpeg)
 	TargetName     string         // configured target name to post to
 	CallbackURL    *string        // optional callback
-	Title          *string        // optional suggested title
 	Metadata       map[string]any // optional arbitrary metadata
 	Stage          Stage          // current stage
 	ErrorMessage   *string        // last error, if any

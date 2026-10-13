@@ -60,13 +60,12 @@ func (t *Target) Name() string { return t.name }
 func (t *Target) Post(ctx context.Context, req targets.TargetRequest) (targets.TargetResult, error) {
 	// Resolve filename via the injected naming strategy.
 	nr := naming.NamingRequest{
-		JobID:          req.JobID,
-		Timestamp:      req.Timestamp,
-		SuggestedTitle: req.SuggestedTitle,
-		SuggestedSlug:  req.SuggestedSlug,
-		Metadata:       req.Metadata,
-		BasePath:       t.cfg.BasePath,
-		Extension:      ".md",
+		JobID:         req.JobID,
+		Timestamp:     req.Timestamp,
+		SuggestedSlug: req.SuggestedSlug,
+		Metadata:      req.Metadata,
+		BasePath:      t.cfg.BasePath,
+		Extension:     ".md",
 	}
 	var filename string
 	var err error
@@ -242,10 +241,9 @@ func (t *Target) renderCommitMessage(req targets.TargetRequest) (string, error) 
 
 func (t *Target) templateData(req targets.TargetRequest) map[string]any {
 	return map[string]any{
-		"JobID":          req.JobID,
-		"Timestamp":      req.Timestamp,
-		"SuggestedTitle": req.SuggestedTitle,
-		"Metadata":       req.Metadata,
+		"JobID":     req.JobID,
+		"Timestamp": req.Timestamp,
+		"Metadata":  req.Metadata,
 	}
 }
 

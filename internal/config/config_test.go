@@ -186,8 +186,7 @@ func TestLoad_NamingStrategyDefault(t *testing.T) {
 func TestLoad_NewGitHubFields(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	extra := `    generateTitle: true
-    namingStrategy: "title"
+	extra := `    namingStrategy: "ai"
 `
 	if err := os.WriteFile(path, []byte(makeMinimalGitHubYAML(dir, extra)), 0o600); err != nil {
 		t.Fatal(err)
@@ -196,11 +195,8 @@ func TestLoad_NewGitHubFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if !cfg.Target.GitHub.GenerateTitle {
-		t.Fatal("expected generateTitle=true")
-	}
-	if cfg.Target.GitHub.NamingStrategy != "title" {
-		t.Fatalf("expected namingStrategy=title, got %q", cfg.Target.GitHub.NamingStrategy)
+	if cfg.Target.GitHub.NamingStrategy != "ai" {
+		t.Fatalf("expected namingStrategy=ai, got %q", cfg.Target.GitHub.NamingStrategy)
 	}
 }
 

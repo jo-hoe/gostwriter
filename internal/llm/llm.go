@@ -25,12 +25,6 @@ type Client interface {
 	TranscribeImage(ctx context.Context, r io.Reader, mime string) (string, Conversation, error)
 }
 
-// TitleGenerator is an optional capability some LLM clients implement.
-// The worker checks for it at runtime via a type-assertion on llm.Client.
-type TitleGenerator interface {
-	GenerateTitle(ctx context.Context, markdown string) (string, error)
-}
-
 // FilenameAdvisor is an optional capability some LLM clients implement: it
 // suggests a filename slug by continuing a prior transcription Conversation,
 // which lets the provider reuse cached context from the transcription call.

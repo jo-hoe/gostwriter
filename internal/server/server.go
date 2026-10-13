@@ -111,7 +111,6 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 		http.Error(w, "invalid callback_url", http.StatusBadRequest)
 		return
 	}
-	titlePtr := parseOptionalString(r.FormValue("title"))
 	metadata, err := parseOptionalJSONMap(r.FormValue("metadata"))
 	if err != nil {
 		http.Error(w, "invalid metadata json", http.StatusBadRequest)
@@ -140,7 +139,6 @@ func (svc *Service) handleCreateTranscription(w http.ResponseWriter, r *http.Req
 		MimeType:    mimeType,
 		TargetName:  targetName,
 		CallbackURL: callbackURLPtr,
-		Title:       titlePtr,
 		Metadata:    metadata,
 		Stage:       jobs.StageQueued,
 		CreatedAt:   time.Now().UTC(),
@@ -282,14 +280,6 @@ func parseOptionalURL(s string) (*string, error) {
 		return nil, err
 	}
 	return &v, nil
-}
-
-func parseOptionalString(s string) *string {
-	v := strings.TrimSpace(s)
-	if v == "" {
-		return nil
-	}
-	return &v
 }
 
 func parseOptionalJSONMap(s string) (map[string]any, error) {

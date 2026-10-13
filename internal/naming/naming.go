@@ -7,13 +7,12 @@ import (
 
 // NamingRequest carries all data a FileNamer may need to produce a path.
 type NamingRequest struct {
-	JobID          string
-	Timestamp      time.Time
-	SuggestedTitle *string
-	SuggestedSlug  *string
-	Metadata       map[string]any
-	BasePath       string // normalised path prefix (trailing slash), applied by each namer
-	Extension      string // e.g. ".md"
+	JobID         string
+	Timestamp     time.Time
+	SuggestedSlug *string
+	Metadata      map[string]any
+	BasePath      string // normalised path prefix (trailing slash), applied by each namer
+	Extension     string // e.g. ".md"
 }
 
 // FileNamer produces a repository-relative file path for a given request.

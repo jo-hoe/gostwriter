@@ -76,15 +76,11 @@ func (s *SQLiteStore) CreateJob(job *Job) error {
 	if job.CallbackURL != nil && *job.CallbackURL != "" {
 		cb = job.CallbackURL
 	}
-	var title *string
-	if job.Title != nil && *job.Title != "" {
-		title = job.Title
-	}
 
 	_, err := s.db.Exec(
-		`INSERT INTO jobs (id, image_path, mime_type, target_name, callback_url, title, metadata_json, stage, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		job.ID, job.ImagePath, job.MimeType, job.TargetName, cb, title, meta, string(job.Stage), job.CreatedAt.UTC().Format(time.RFC3339Nano),
+		`INSERT INTO jobs (id, image_path, mime_type, target_name, callback_url, metadata_json, stage, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		job.ID, job.ImagePath, job.MimeType, job.TargetName, cb, meta, string(job.Stage), job.CreatedAt.UTC().Format(time.RFC3339Nano),
 	)
 	if err != nil {
 		return fmt.Errorf("insert job: %w", err)
@@ -152,7 +148,7 @@ func (s *SQLiteStore) GetJob(id string) (*Job, error) {
 		&job.MimeType,
 		&job.TargetName,
 		&cb,
-		&title,
+		&title, // title column kept in schema for DB compatibility; field removed from Job
 		&meta,
 		&stage,
 		&errMsg,
@@ -172,10 +168,8 @@ func (s *SQLiteStore) GetJob(id string) (*Job, error) {
 		v := cb.String
 		job.CallbackURL = &v
 	}
-	if title.Valid {
-		v := title.String
-		job.Title = &v
-	}
+	// title column is intentionally ignored — title generation was removed
+	_ = title
 	if meta.Valid && meta.String != "" {
 		var m map[string]any
 		if err := json.Unmarshal([]byte(meta.String), &m); err == nil {

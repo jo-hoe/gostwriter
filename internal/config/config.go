@@ -81,11 +81,8 @@ type GitHubTargetConfig struct {
 	AuthorEmail           string           `yaml:"authorEmail"`
 	APIBaseURL            string           `yaml:"apiBaseUrl"` // optional, default https://api.github.com
 	Auth                  GitHubAuthConfig `yaml:"auth"`
-	// GenerateTitle causes the LLM to generate a title from the transcription
-	// when the caller did not supply one.
-	GenerateTitle bool `yaml:"generateTitle"`
 	// NamingStrategy selects the FileNamer implementation.
-	// Valid values: "template" (default), "title", "ai"
+	// Valid values: "template" (default), "ai"
 	NamingStrategy string `yaml:"namingStrategy"`
 	// Archive, when enabled, commits the original uploaded document to the
 	// repository alongside the transcription and links to it from the Markdown.
@@ -357,10 +354,10 @@ func validate(cfg *Config) error {
 			return fmt.Errorf("github.auth.token is required")
 		}
 		switch g.NamingStrategy {
-		case "template", "title", "ai":
+		case "template", "ai":
 			// valid
 		default:
-			return fmt.Errorf("github.namingStrategy must be \"template\", \"title\", or \"ai\", got %q", g.NamingStrategy)
+			return fmt.Errorf("github.namingStrategy must be \"template\" or \"ai\", got %q", g.NamingStrategy)
 		}
 		// archive.path may be empty (co-locate with basePath, applied as a
 		// default above) or equal basePath; originals keep the transcription's

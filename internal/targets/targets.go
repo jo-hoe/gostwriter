@@ -13,12 +13,11 @@ type Target interface {
 
 // TargetRequest contains data needed to post content.
 type TargetRequest struct {
-	JobID            string
-	Markdown         string
-	SuggestedTitle   *string
-	SuggestedSlug    *string
-	Metadata         map[string]any
-	Timestamp        time.Time
+	JobID         string
+	Markdown      string
+	SuggestedSlug *string
+	Metadata      map[string]any
+	Timestamp     time.Time
 	FilenameTemplate string
 	CommitTemplate   string
 	BasePath         string

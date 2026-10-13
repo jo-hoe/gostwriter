@@ -42,8 +42,6 @@ func buildFileNamer(cfg appcfg.GitHubTargetConfig, httpClient *http.Client) (nam
 
 	var base naming.FileNamer
 	switch cfg.NamingStrategy {
-	case "title":
-		base = naming.NewTitleNamer(cfg.BasePath, ".md")
 	case "ai":
 		base = naming.NewAINamer(cfg.BasePath, ".md")
 	default: // "template"
@@ -54,7 +52,7 @@ func buildFileNamer(cfg appcfg.GitHubTargetConfig, httpClient *http.Client) (nam
 		}
 	}
 
-	if cfg.NamingStrategy == "title" || cfg.NamingStrategy == "ai" {
+	if cfg.NamingStrategy == "ai" {
 		checker := naming.NewGitHubPathChecker(
 			httpClient,
 			cfg.APIBaseURL,

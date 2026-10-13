@@ -2,7 +2,9 @@ package naming
 
 import (
 	"path/filepath"
+	"regexp"
 	"strings"
+	"unicode"
 )
 
 // AINamer produces filenames of the form "YYYYMMdd-HHmmss-<slug><ext>".
@@ -36,4 +38,25 @@ func (n *AINamer) Name(req NamingRequest) (string, error) {
 		name = filepath.Join(n.basePath, name)
 	}
 	return filepath.ToSlash(name), nil
+}
+
+var reNonWord = regexp.MustCompile(`-{2,}`)
+
+// Slugify converts a string to a lowercase, filename-safe slug.
+func Slugify(s string) string {
+	s = strings.TrimSpace(s)
+	var b strings.Builder
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(unicode.ToLower(r))
+		} else {
+			b.WriteRune('-')
+		}
+	}
+	result := reNonWord.ReplaceAllString(b.String(), "-")
+	result = strings.Trim(result, "-")
+	if result == "" {
+		return "untitled"
+	}
+	return result
 }

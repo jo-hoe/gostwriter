@@ -225,8 +225,8 @@ func TestPost_CollisionNamerContextPropagated(t *testing.T) {
 		Auth:                  appcfg.GitHubAuthConfig{Token: "tok"},
 	}
 
-	title := "note"
-	inner := naming.NewTitleNamer("inbox/", ".md")
+	slug := "note"
+	inner := naming.NewAINamer("inbox/", ".md")
 	checker := naming.NewGitHubPathChecker(srv.Client(), srv.URL, "org", "repo", "main", "tok")
 	collisionNamer := naming.NewCollisionNamer(inner, checker, 10)
 
@@ -234,13 +234,13 @@ func TestPost_CollisionNamerContextPropagated(t *testing.T) {
 	tg.WithHTTPClient(srv.Client())
 
 	_, err := tg.Post(context.Background(), targets.TargetRequest{
-		JobID: "j1", Markdown: "hello", Timestamp: time.Now(),
-		SuggestedTitle: &title,
+		JobID: "j1", Markdown: "hello", Timestamp: time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC),
+		SuggestedSlug: &slug,
 	})
 	if err != nil {
 		t.Fatalf("Post: %v", err)
 	}
-	// Verify the final PUT used the suffixed name
+	// Verify the final PUT used the suffixed name (AINamer produces YYYYMMDD-HHMMSS-<slug>)
 	lastPath := requestPaths[len(requestPaths)-1]
 	if !strings.HasSuffix(lastPath, "note-1.md") {
 		t.Fatalf("expected PUT to suffixed path, got: %s", lastPath)
