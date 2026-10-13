@@ -1,8 +1,9 @@
 // Package openai implements the gostwriter LLM capabilities (transcription and
-// filename suggestion) against any OpenAI-compatible Chat Completions endpoint,
-// including an ai-proxy reverse proxy or api.openai.com.
-// The wire protocol lives in the chat sub-package so additional providers can
-// reuse it.
+// filename suggestion) against any OpenAI-compatible Responses API endpoint,
+// including a reverse proxy or api.openai.com. The Responses API transcribes
+// both images and PDFs natively (via "input_image" and "input_file" parts).
+// The wire protocol lives in the responses sub-package so additional providers
+// can reuse it.
 package openai
 
 import (
@@ -14,7 +15,7 @@ import (
 
 	"github.com/jo-hoe/gostwriter/internal/config"
 	"github.com/jo-hoe/gostwriter/internal/llm"
-	"github.com/jo-hoe/gostwriter/internal/llm/openai/chat"
+	"github.com/jo-hoe/gostwriter/internal/llm/openai/responses"
 )
 
 //go:embed default_system_prompt.txt
@@ -40,17 +41,17 @@ const (
 )
 
 // conversation is the openai implementation of llm.Conversation. It carries the
-// full message history of a completed exchange so follow-up calls can continue
+// full input history of a completed exchange so follow-up calls can continue
 // it, letting the provider reuse cached prompt context.
 type conversation struct {
-	messages []chat.Message
+	input []responses.Item
 }
 
 func (*conversation) Provider() string { return providerName }
 
-// Client implements llm.Client by calling an OpenAI-compatible chat endpoint.
+// Client implements llm.Client by calling an OpenAI-compatible Responses endpoint.
 type Client struct {
-	chat        *chat.Client
+	responses   *responses.Client
 	model       string
 	system      string
 	instr       string
@@ -61,7 +62,7 @@ type Client struct {
 // New creates an OpenAI provider client from configuration.
 func New(cfg config.OpenAISettings) *Client {
 	return &Client{
-		chat:        chat.NewClient(cfg.BaseURL, cfg.APIKey, cfg.Timeout),
+		responses:   responses.NewClient(cfg.BaseURL, cfg.APIKey, cfg.Timeout),
 		model:       cfg.Model,
 		system:      cfg.SystemPrompt,
 		instr:       cfg.Instructions,
@@ -71,7 +72,8 @@ func New(cfg config.OpenAISettings) *Client {
 }
 
 // TranscribeImage transcribes the document into Markdown and returns the
-// completed conversation for follow-up calls.
+// completed conversation for follow-up calls. Both images and PDFs are
+// supported via the Responses API.
 func (c *Client) TranscribeImage(ctx context.Context, r io.Reader, mime string) (string, llm.Conversation, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -81,16 +83,16 @@ func (c *Client) TranscribeImage(ctx context.Context, r io.Reader, mime string) 
 		return "", nil, fmt.Errorf("document is empty")
 	}
 
-	msgs := c.transcriptionMessages(chat.BuildDocumentPart(mime, data))
-	req := c.newRequest(msgs, c.maxTokens)
+	input := c.transcriptionInput(responses.BuildDocumentPart(mime, data))
+	req := c.newRequest(input, c.maxTokens)
 
-	content, err := c.chat.Complete(ctx, req)
+	content, err := c.responses.Complete(ctx, req)
 	if err != nil {
 		return "", nil, fmt.Errorf("transcribe: %w", err)
 	}
 
 	conv := &conversation{
-		messages: append(msgs, chat.Message{Role: chat.RoleAssistant, Content: content}),
+		input: append(input, assistantItem(content)),
 	}
 	return content, conv, nil
 }
@@ -104,24 +106,24 @@ func (c *Client) SuggestFilename(ctx context.Context, conv llm.Conversation) (st
 		return "", fmt.Errorf("openai: unsupported conversation type %T", conv)
 	}
 
-	msgs := make([]chat.Message, len(prior.messages)+1)
-	copy(msgs, prior.messages)
-	msgs[len(prior.messages)] = chat.Message{
-		Role:    chat.RoleUser,
-		Content: strings.TrimSpace(defaultFilenameInstructions),
+	input := make([]responses.Item, len(prior.input)+1)
+	copy(input, prior.input)
+	input[len(prior.input)] = responses.Item{
+		Role:    responses.RoleUser,
+		Content: []responses.Part{responses.TextPart(strings.TrimSpace(defaultFilenameInstructions))},
 	}
-	req := c.newRequest(msgs, c.maxTokensOr(filenameMaxTokens))
+	req := c.newRequest(input, c.maxTokensOr(filenameMaxTokens))
 
-	slug, err := c.chat.Complete(ctx, req)
+	slug, err := c.responses.Complete(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("suggest filename: %w", err)
 	}
 	return cleanCompletion(slug), nil
 }
 
-// transcriptionMessages builds the system + user messages for a transcription,
+// transcriptionInput builds the system + user input items for a transcription,
 // applying configured prompt overrides or the embedded defaults.
-func (c *Client) transcriptionMessages(userPart chat.Part) []chat.Message {
+func (c *Client) transcriptionInput(userPart responses.Part) []responses.Item {
 	sys := strings.TrimSpace(c.system)
 	if sys == "" {
 		sys = defaultSystemPrompt
@@ -130,28 +132,36 @@ func (c *Client) transcriptionMessages(userPart chat.Part) []chat.Message {
 	if instructions == "" {
 		instructions = defaultInstructions
 	}
-	return []chat.Message{
-		{Role: chat.RoleSystem, Content: sys},
-		{Role: chat.RoleUser, Content: []chat.Part{
-			{Type: chat.PartText, Text: &instructions},
+	return []responses.Item{
+		{Role: responses.RoleSystem, Content: []responses.Part{responses.TextPart(sys)}},
+		{Role: responses.RoleUser, Content: []responses.Part{
+			responses.TextPart(instructions),
 			userPart,
 		}},
 	}
 }
 
-// newRequest assembles a chat.Request for the configured model, applying the
-// optional temperature and the given max-tokens budget.
-func (c *Client) newRequest(msgs []chat.Message, maxTokens *int) chat.Request {
-	req := chat.Request{
-		Model:    c.model,
-		Messages: msgs,
-		Stream:   false,
+// assistantItem wraps an assistant reply as an input item so it can be resent
+// as prior context on follow-up calls.
+func assistantItem(content string) responses.Item {
+	return responses.Item{
+		Role:    responses.RoleAssistant,
+		Content: []responses.Part{responses.TextPart(content)},
+	}
+}
+
+// newRequest assembles a responses.Request for the configured model, applying
+// the optional temperature and the given max-output-tokens budget.
+func (c *Client) newRequest(input []responses.Item, maxTokens *int) responses.Request {
+	req := responses.Request{
+		Model: c.model,
+		Input: input,
 	}
 	if c.temperature != nil {
 		req.Temperature = c.temperature
 	}
 	if maxTokens != nil {
-		req.MaxTokens = maxTokens
+		req.MaxOutputTokens = maxTokens
 	}
 	return req
 }

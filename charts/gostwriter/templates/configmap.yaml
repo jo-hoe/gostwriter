@@ -42,6 +42,15 @@ data:
         temperature: {{ .Values.llm.openai.temperature }}
         maxTokens: {{ .Values.llm.openai.maxTokens }}
         timeout: {{ .Values.llm.openai.timeout }}
+      anthropic:
+        baseUrl: {{ .Values.llm.anthropic.baseUrl | quote }}
+        apiKey: {{ .Values.llm.anthropic.apiKey | quote }}
+        model: {{ .Values.llm.anthropic.model | quote }}
+        systemPrompt: {{ .Values.llm.anthropic.systemPrompt | quote }}
+        instructions: {{ .Values.llm.anthropic.instructions | quote }}
+        temperature: {{ .Values.llm.anthropic.temperature }}
+        maxTokens: {{ .Values.llm.anthropic.maxTokens }}
+        timeout: {{ .Values.llm.anthropic.timeout }}
     target:
       github:
         enabled: {{ .Values.target.github.enabled }}

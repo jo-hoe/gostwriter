@@ -40,9 +40,10 @@ type ServerConfig struct {
 
 // LLMConfig selects provider and provider-specific options.
 type LLMConfig struct {
-	Provider string         `yaml:"provider"` // "mock" or "openai"
-	Mock     MockSettings   `yaml:"mock"`
-	OpenAI   OpenAISettings `yaml:"openai"`
+	Provider  string            `yaml:"provider"` // "mock", "openai", or "anthropic"
+	Mock      MockSettings      `yaml:"mock"`
+	OpenAI    OpenAISettings    `yaml:"openai"`
+	Anthropic AnthropicSettings `yaml:"anthropic"`
 }
 
 // MockSettings config for the mock LLM.
@@ -51,16 +52,32 @@ type MockSettings struct {
 	Prefix string        `yaml:"prefix"`
 }
 
-// OpenAISettings configures the OpenAI-compatible chat provider. BaseURL may
-// point at api.openai.com, an ai-proxy reverse proxy, or any compatible gateway.
+// OpenAISettings configures the OpenAI-compatible Responses API provider.
+// BaseURL may point at api.openai.com, a reverse proxy, or any compatible
+// gateway. This provider transcribes both images and PDFs natively (as
+// input_image and input_file content parts).
 type OpenAISettings struct {
-	BaseURL      string        `yaml:"baseUrl"`      // e.g. http://localhost:8900 (ai-proxy) or https://api.openai.com
+	BaseURL      string        `yaml:"baseUrl"`      // e.g. http://localhost:8900 or https://api.openai.com
 	APIKey       string        `yaml:"apiKey"`       // optional
-	Model        string        `yaml:"model"`        // e.g. gpt-5
+	Model        string        `yaml:"model"`        // Responses-API model that accepts PDF input, e.g. a gpt-5-family model (gpt-4.1 / gpt-5-mini are Chat Completions only)
 	SystemPrompt string        `yaml:"systemPrompt"` // optional system message override
 	Instructions string        `yaml:"instructions"` // optional user instruction override
 	Temperature  float32       `yaml:"temperature"`  // optional
 	MaxTokens    int           `yaml:"maxTokens"`    // optional
+	Timeout      time.Duration `yaml:"timeout"`      // HTTP client timeout; 0 → default of 5m
+}
+
+// AnthropicSettings configures the native Anthropic Messages provider. BaseURL
+// may point at api.anthropic.com or a reverse proxy exposing an /anthropic
+// route. This provider accepts PDFs natively (as document content blocks).
+type AnthropicSettings struct {
+	BaseURL      string        `yaml:"baseUrl"`      // e.g. http://localhost:8900/anthropic or https://api.anthropic.com
+	APIKey       string        `yaml:"apiKey"`       // optional
+	Model        string        `yaml:"model"`        // e.g. anthropic--claude-4.5-sonnet
+	SystemPrompt string        `yaml:"systemPrompt"` // optional system message override
+	Instructions string        `yaml:"instructions"` // optional user instruction override
+	Temperature  float32       `yaml:"temperature"`  // optional
+	MaxTokens    int           `yaml:"maxTokens"`    // response token budget (required by the API; 0 → default)
 	Timeout      time.Duration `yaml:"timeout"`      // HTTP client timeout; 0 → default of 5m
 }
 
@@ -268,7 +285,7 @@ func applyDefaults(cfg *Config) {
 
 	// LLM defaults
 	if cfg.LLM.Provider == "" {
-		cfg.LLM.Provider = "mock"
+		cfg.LLM.Provider = "openai"
 	}
 	if cfg.LLM.Mock.Delay == 0 {
 		cfg.LLM.Mock.Delay = 2 * time.Second
@@ -283,6 +300,18 @@ func applyDefaults(cfg *Config) {
 		}
 		if strings.TrimSpace(cfg.LLM.OpenAI.Model) == "" {
 			cfg.LLM.OpenAI.Model = "gpt-5"
+		}
+	}
+	// Anthropic sensible defaults (used if provider == "anthropic")
+	if strings.EqualFold(cfg.LLM.Provider, "anthropic") {
+		if strings.TrimSpace(cfg.LLM.Anthropic.BaseURL) == "" {
+			cfg.LLM.Anthropic.BaseURL = "http://localhost:8900/anthropic"
+		}
+		if strings.TrimSpace(cfg.LLM.Anthropic.Model) == "" {
+			cfg.LLM.Anthropic.Model = "anthropic--claude-4.5-sonnet"
+		}
+		if cfg.LLM.Anthropic.MaxTokens == 0 {
+			cfg.LLM.Anthropic.MaxTokens = 4096
 		}
 	}
 }
@@ -322,10 +351,10 @@ func postProcessTargets(cfg *Config) error {
 func validate(cfg *Config) error {
 	// Validate the LLM provider selection.
 	switch strings.ToLower(strings.TrimSpace(cfg.LLM.Provider)) {
-	case "mock", "openai":
+	case "mock", "openai", "anthropic":
 		// valid
 	default:
-		return fmt.Errorf("llm.provider must be \"mock\" or \"openai\", got %q", cfg.LLM.Provider)
+		return fmt.Errorf("llm.provider must be \"mock\", \"openai\", or \"anthropic\", got %q", cfg.LLM.Provider)
 	}
 
 	// Ensure at least one target is enabled
