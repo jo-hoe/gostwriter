@@ -289,28 +289,6 @@ func filepathJoin(dir, name string) string {
 	return dir + string(os.PathSeparator) + name
 }
 
-func makeWorkerWithCapture(t *testing.T, llmClient *llmMock) (*Worker, *capturingTarget, jobs.Store) {
-	t.Helper()
-	store := newMemStore()
-	tgt := &capturingTarget{name: "github"}
-	reg := targets.NewRegistry()
-	reg.Add(tgt)
-	cfg := &config.Config{
-		Server: config.ServerConfig{
-			CallbackRetries: 1,
-			CallbackBackoff: 10 * time.Millisecond,
-			StorageDir:      t.TempDir(),
-			MaxUploadSize:   config.ByteSize(10 * 1024 * 1024),
-		},
-		Target: config.TargetsConfig{
-			GitHub: config.GitHubTargetConfig{
-				Enabled: true,
-			},
-		},
-	}
-	return New(discardLogger(), cfg, store, llmClient, reg), tgt, store
-}
-
 func makeTempImage(t *testing.T) string {
 	t.Helper()
 	p := filepathJoin(t.TempDir(), "img.png")
