@@ -194,7 +194,7 @@ func Load(path string) (*Config, error) {
 		}
 	}
 	cleanPath := filepath.Clean(path)
-	data, err := os.ReadFile(cleanPath) // #nosec G304 - reading sanitized config file path is expected
+	data, err := os.ReadFile(cleanPath) // #nosec G304 G703 -- reading sanitized config file path is expected
 	if err != nil {
 		return nil, fmt.Errorf("read config: %w", err)
 	}
