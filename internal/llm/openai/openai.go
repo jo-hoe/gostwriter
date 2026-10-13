@@ -104,10 +104,12 @@ func (c *Client) SuggestFilename(ctx context.Context, conv llm.Conversation) (st
 		return "", fmt.Errorf("openai: unsupported conversation type %T", conv)
 	}
 
-	msgs := append(prior.messages, chat.Message{
+	msgs := make([]chat.Message, len(prior.messages)+1)
+	copy(msgs, prior.messages)
+	msgs[len(prior.messages)] = chat.Message{
 		Role:    chat.RoleUser,
 		Content: strings.TrimSpace(defaultFilenameInstructions),
-	})
+	}
 	req := c.newRequest(msgs, c.maxTokensOr(filenameMaxTokens))
 
 	slug, err := c.chat.Complete(ctx, req)

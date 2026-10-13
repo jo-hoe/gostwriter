@@ -3,25 +3,36 @@
 version: "2"
 
 linters:
-  # Enable specific linters on top of the defaults.
   enable:
+    # --- original Makefile linters ---
     - dupl          # code duplication detection
     - gocyclo       # cyclomatic complexity
     - gosec         # security checks (G-rules)
     - misspell      # spelling mistakes in comments/strings
     - sqlclosecheck # sql.Rows/Stmt close check
+    # --- additional linters (clean today) ---
+    - bodyclose     # HTTP response body not closed
+    - exhaustive    # missing switch cases on enum types
+    - gocritic      # broad style/performance/correctness checks
+    - unconvert     # unnecessary type conversions
+    # --- linters with existing issues (tracked below, enable once fixed) ---
+    # - noctx       # TODO: migrate db/http calls to context-aware variants
+    # - revive      # TODO: add package comments and fix doc issues
+    # - wrapcheck   # TODO: wrap errors from external packages
 
 linters-settings:
   gocyclo:
-    # Maximum cyclomatic complexity before a function is flagged.
     min-complexity: 30
 
   dupl:
-    # Minimum token sequence size considered as duplicate.
     threshold: 150
 
+  exhaustive:
+    # A default case counts as handling all values.
+    default-signifies-exhaustive: true
+
+  gocritic: {}
+
 issues:
-  # Maximum number of issues per linter (0 = unlimited).
   max-issues-per-linter: 0
-  # Maximum number of same issues (0 = unlimited).
   max-same-issues: 0

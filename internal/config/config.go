@@ -374,7 +374,7 @@ func normalizePathPrefix(p string) string {
 	}
 	p = strings.ReplaceAll(p, "\\", "/")
 	if !strings.HasSuffix(p, "/") {
-		p = p + "/"
+		p += "/"
 	}
 	// Remove leading "./"
 	p = strings.TrimPrefix(p, "./")
