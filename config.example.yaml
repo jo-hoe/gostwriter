@@ -5,7 +5,10 @@
 server:
   address: ":8080"
   readTimeout: 15s
-  writeTimeout: 2m
+  # Transcription runs synchronously within this window; keep it above the
+  # slowest expected LLM response (reasoning models on large PDFs can take
+  # minutes).
+  writeTimeout: 5m
   idleTimeout: 60s
   maxUploadSize: 10Mi
   workerCount: 4

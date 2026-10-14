@@ -254,6 +254,27 @@ func TestClient_Complete_EmptyOutput(t *testing.T) {
 	}
 }
 
+// TestClient_Complete_ReasoningOnlyIsEmpty reproduces the real failure a
+// reasoning model returns when max_output_tokens is exhausted by the hidden
+// reasoning pass before any visible text: the output array is non-empty but
+// carries ONLY a (contentless) "reasoning" item and no "message"/"output_text".
+// Complete must treat this as an empty completion so callers can surface a
+// clear error rather than a blank result.
+func TestClient_Complete_ReasoningOnlyIsEmpty(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(Response{Output: []OutputItem{
+			{Type: "reasoning", Content: []OutputContent{}},
+		}})
+	}))
+	defer ts.Close()
+
+	c := NewClient(ts.URL, "", 0)
+	if _, err := c.Complete(context.Background(), Request{Model: "m"}); err == nil {
+		t.Fatal("expected empty-completion error for a reasoning-only response")
+	}
+}
+
 func TestClient_Complete_ContextCancel(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(2 * time.Second)

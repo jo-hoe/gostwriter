@@ -2,7 +2,7 @@ apiVersion: v2
 name: gostwriter
 description: Helm chart for deploying Gostwriter
 type: application
-version: 2.1.2
-appVersion: "2.1.2"
+version: 2.1.3
+appVersion: "2.1.3"
 sources:
   - https://github.com/jo-hoe/gostwriter

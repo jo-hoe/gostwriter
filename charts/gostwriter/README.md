@@ -68,7 +68,7 @@ Helm chart for deploying Gostwriter
 | replicaCount | int | `1` | Number of desired pod replicas |
 | resources | object | `{}` | Resource requests and limits for the container |
 | securityContext | object | `{}` | Container-level security context |
-| server | object | `{"address":":8080","apiKey":"","callbackBackoff":"2s","callbackRetries":3,"databasePath":"","idleTimeout":"60s","maxUploadSize":"10Mi","readTimeout":"15s","shutdownGrace":"15s","storageDir":"/app/data","workerCount":4,"writeTimeout":"2m"}` | Structured configuration rendered into config.yaml (used only when configRaw is empty) |
+| server | object | `{"address":":8080","apiKey":"","callbackBackoff":"2s","callbackRetries":3,"databasePath":"","idleTimeout":"60s","maxUploadSize":"10Mi","readTimeout":"15s","shutdownGrace":"15s","storageDir":"/app/data","workerCount":4,"writeTimeout":"5m"}` | Structured configuration rendered into config.yaml (used only when configRaw is empty) |
 | server.address | string | `":8080"` | HTTP bind address |
 | server.apiKey | string | `""` | Optional static API key required via X-API-Key header |
 | server.callbackBackoff | string | `"2s"` | Base backoff duration between callback retries |
@@ -80,7 +80,7 @@ Helm chart for deploying Gostwriter
 | server.shutdownGrace | string | `"15s"` | Grace period on shutdown to wait for workers to finish |
 | server.storageDir | string | `"/app/data"` | Directory inside the container where data is stored (DB, git cache) |
 | server.workerCount | int | `4` | Number of worker goroutines processing jobs |
-| server.writeTimeout | string | `"2m"` | Maximum time to process and write the response for a request |
+| server.writeTimeout | string | `"5m"` | Maximum time to process and write the response for a request. A full transcription runs synchronously within this window, so it must exceed the slowest expected LLM response (reasoning models on large PDFs can take minutes); too low a value cancels in-flight transcriptions. |
 | service.port | int | `80` | Service port |
 | service.targetPort | int | `8080` | Target container port exposed by the application |
 | service.type | string | `"ClusterIP"` | Kubernetes Service type |

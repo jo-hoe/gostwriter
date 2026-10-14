@@ -108,8 +108,11 @@ server:
   address: ":8080"
   # -- Maximum time to read the entire request (headers + body)
   readTimeout: 15s
-  # -- Maximum time to process and write the response for a request
-  writeTimeout: 2m
+  # -- Maximum time to process and write the response for a request. A full
+  # transcription runs synchronously within this window, so it must exceed the
+  # slowest expected LLM response (reasoning models on large PDFs can take
+  # minutes); too low a value cancels in-flight transcriptions.
+  writeTimeout: 5m
   # -- Keep-alive idle timeout for connections (no effect on in-flight requests)
   idleTimeout: 60s
   # -- Max allowed upload size (e.g., 10Mi, 20MB)

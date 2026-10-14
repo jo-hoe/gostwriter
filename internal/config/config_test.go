@@ -512,3 +512,39 @@ target:
 		t.Fatalf("expected default model gpt-5, got %q", cfg.LLM.OpenAI.Model)
 	}
 }
+
+// TestLoad_ServerWriteTimeoutDefault pins the default server writeTimeout.
+// Transcription runs synchronously within the server's write window; a default
+// too low (it was 2m) cancels slow in-flight transcriptions — reasoning models
+// on large PDFs can take minutes — so the default must leave real headroom.
+func TestLoad_ServerWriteTimeoutDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	yaml := `
+server:
+  address: ":0"
+  storageDir: "` + escapeBackslashes(dir) + `"
+llm:
+  provider: "mock"
+target:
+  github:
+    enabled: true
+    repositoryOwner: "org"
+    repositoryName: "repo"
+    branch: "main"
+    filenameTemplate: "{{ .JobID }}.md"
+    commitMessageTemplate: "Add {{ .JobID }}"
+    auth:
+      token: "tok"
+`
+	if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Server.WriteTimeout != 5*time.Minute {
+		t.Fatalf("expected default writeTimeout 5m, got %v", cfg.Server.WriteTimeout)
+	}
+}
