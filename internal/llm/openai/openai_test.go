@@ -221,6 +221,11 @@ func TestOpenAI_SuggestFilename_ContinuesConversation(t *testing.T) {
 	if secondBody.Input[2].Role != responses.RoleAssistant {
 		t.Fatalf("expected assistant reply retained at index 2, got %q", secondBody.Input[2].Role)
 	}
+	// The assistant item must use "output_text" parts, not "input_text".
+	// The Responses API rejects "input_text" on the assistant role with a 400.
+	if len(secondBody.Input[2].Content) == 0 || secondBody.Input[2].Content[0].Type != responses.PartOutputText {
+		t.Fatalf("assistant item must use PartOutputText, got content: %+v", secondBody.Input[2].Content)
+	}
 	if secondBody.Input[3].Role != responses.RoleUser {
 		t.Fatalf("expected filename instruction as final user turn, got %q", secondBody.Input[3].Role)
 	}
