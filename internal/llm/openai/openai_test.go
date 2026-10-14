@@ -231,6 +231,50 @@ func TestOpenAI_SuggestFilename_ContinuesConversation(t *testing.T) {
 	}
 }
 
+// TestOpenAI_SuggestFilename_BudgetClearsReasoning guards the filename
+// max-output-tokens budget. On the Responses API, a reasoning model spends
+// hidden reasoning tokens against max_output_tokens before emitting any visible
+// text; a budget too small to clear that pass returns an "incomplete" response
+// with only a contentless "reasoning" item and no slug (observed empty
+// completion with the previous 32-token cap). The default budget must stay large
+// enough that reasoning plus a short slug both fit.
+func TestOpenAI_SuggestFilename_BudgetClearsReasoning(t *testing.T) {
+	var secondBody responses.Request
+	var calls int
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 2 {
+			_ = json.NewDecoder(r.Body).Decode(&secondBody)
+		}
+		content := "transcribed"
+		if calls == 2 {
+			content = "invoice-november"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(okResponse(content))
+	}))
+	defer ts.Close()
+
+	// No MaxTokens override configured: SuggestFilename falls back to the
+	// internal filename budget, which is what we are guarding.
+	c := New(config.OpenAISettings{BaseURL: ts.URL, Model: "gpt-5"})
+	_, conv, err := c.TranscribeImage(context.Background(), bytes.NewReader([]byte("img")), "image/png")
+	if err != nil {
+		t.Fatalf("TranscribeImage: %v", err)
+	}
+	if _, err := c.SuggestFilename(context.Background(), conv); err != nil {
+		t.Fatalf("SuggestFilename: %v", err)
+	}
+	if secondBody.MaxOutputTokens == nil {
+		t.Fatal("expected a max_output_tokens budget on the filename call")
+	}
+	// A reasoning pass alone was observed at ~320 tokens; require clear headroom
+	// so reasoning plus the slug cannot exhaust the budget.
+	if *secondBody.MaxOutputTokens < 512 {
+		t.Fatalf("filename budget too small to clear a reasoning pass: %d", *secondBody.MaxOutputTokens)
+	}
+}
+
 func TestOpenAI_SuggestFilename_RejectsForeignConversation(t *testing.T) {
 	c := New(config.OpenAISettings{BaseURL: "http://example.invalid", Model: "gpt-5"})
 	_, err := c.SuggestFilename(context.Background(), foreignConversation{})

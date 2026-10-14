@@ -36,8 +36,17 @@ var (
 const providerName = "openai"
 
 const (
-	// filenameMaxTokens bounds the filename-slug completion.
-	filenameMaxTokens = 32
+	// filenameMaxTokens bounds the filename-slug completion. It must be large
+	// enough to cover a reasoning model's hidden reasoning tokens *and* the
+	// visible slug: on the Responses API, reasoning tokens count against
+	// max_output_tokens, and a budget too small to clear the reasoning pass
+	// returns an "incomplete" response with only a (contentless) "reasoning"
+	// output item and no "message"/"output_text" — i.e. an empty completion.
+	// gpt-5 was observed spending ~320 reasoning tokens before emitting a short
+	// slug, so a tiny cap (the previous value was 32) could never yield output.
+	// 2048 leaves generous headroom for reasoning plus the handful of tokens a
+	// kebab-case filename needs.
+	filenameMaxTokens = 2048
 )
 
 // conversation is the openai implementation of llm.Conversation. It carries the
