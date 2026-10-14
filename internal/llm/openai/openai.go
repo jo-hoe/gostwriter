@@ -142,11 +142,12 @@ func (c *Client) transcriptionInput(userPart responses.Part) []responses.Item {
 }
 
 // assistantItem wraps an assistant reply as an input item so it can be resent
-// as prior context on follow-up calls.
+// as prior context on follow-up calls. The Responses API requires "output_text"
+// (not "input_text") for assistant-role content parts.
 func assistantItem(content string) responses.Item {
 	return responses.Item{
 		Role:    responses.RoleAssistant,
-		Content: []responses.Part{responses.TextPart(content)},
+		Content: []responses.Part{responses.OutputTextPart(content)},
 	}
 }
 

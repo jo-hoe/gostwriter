@@ -59,6 +59,10 @@ const (
 	PartInputText  PartType = "input_text"
 	PartInputImage PartType = "input_image"
 	PartInputFile  PartType = "input_file"
+	// PartOutputText is used for assistant-role content parts when replaying
+	// prior assistant turns as history. The Responses API requires this type
+	// for assistant content; "input_text" is rejected on the assistant role.
+	PartOutputText PartType = "output_text"
 )
 
 // Output item/content type discriminators returned by the API.
@@ -230,6 +234,13 @@ func BuildDocumentPart(mime string, data []byte) Part {
 // TextPart returns an "input_text" content part carrying s.
 func TextPart(s string) Part {
 	return Part{Type: PartInputText, Text: s}
+}
+
+// OutputTextPart returns an "output_text" content part carrying s. Use this
+// for assistant-role items when replaying prior turns as conversation history;
+// the Responses API rejects "input_text" on the assistant role.
+func OutputTextPart(s string) Part {
+	return Part{Type: PartOutputText, Text: s}
 }
 
 // BuildDataURL encodes data as a base64 data URL with the given mime type,

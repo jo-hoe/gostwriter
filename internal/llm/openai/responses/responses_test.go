@@ -267,3 +267,22 @@ func TestClient_Complete_ContextCancel(t *testing.T) {
 		t.Fatal("expected context cancellation error")
 	}
 }
+
+func TestOutputTextPart_Type(t *testing.T) {
+	p := OutputTextPart("hello")
+	if p.Type != PartOutputText {
+		t.Fatalf("expected type %q, got %q", PartOutputText, p.Type)
+	}
+	if p.Text != "hello" {
+		t.Fatalf("expected text %q, got %q", "hello", p.Text)
+	}
+	// Ensure the type serialises correctly on the wire — the Responses API
+	// requires "output_text" (not "input_text") for assistant-role content.
+	b, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(b), `"output_text"`) {
+		t.Fatalf("expected output_text in JSON, got %s", b)
+	}
+}
